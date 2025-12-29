@@ -65,6 +65,7 @@ local Tabs = {
     Main = Window:AddTab({ Title = "Auto Farm", Icon = "swords" }),
     Tower = Window:AddTab({ Title = "Infinite Towers", Icon = "sword" }),
     Stats = Window:AddTab({ Title = "Stats", Icon = "trending-up" }),
+    Sell = Window:AddTab({Title = "Sell", Icon = "layers" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
 -- =========================================================
@@ -626,7 +627,107 @@ Tabs.Stats:AddToggle("AutoHealth", {
     Default = false,
     Callback = function(v) AutoHealth = v end
 })
+-- =========================================================
+-- AUTO SELL
+repeat task.wait() until game:IsLoaded()
 
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+local AutoSell = false
+local SellPlaceId = 11872917490 
+
+local OrderedRarities = { "common", "uncommon", "rare", "epic", "legendary", "heirloom" }
+
+local SellRarities = {}
+for _, rarity in ipairs(OrderedRarities) do
+    SellRarities[rarity] = false
+end
+
+Tabs.Sell:AddToggle("AutoSellToggle", {
+    Title = "Auto Sell",
+    Default = false,
+    Callback = function(v)
+        AutoSell = v
+    end
+})
+
+for _, rarity in ipairs(OrderedRarities) do
+    Tabs.Sell:AddToggle(rarity:sub(1,1):upper()..rarity:sub(2), {
+        Title = rarity:sub(1,1):upper()..rarity:sub(2),
+        Default = false,
+        Callback = function(v)
+            SellRarities[rarity] = v
+        end
+    })
+end
+
+local function GetItemsToSell()
+    local inventory = LocalPlayer.PlayerGui:FindFirstChild("Inventory")
+    if not inventory then return nil end
+
+    local rightSide = inventory:FindFirstChild("Inventory") and inventory.Inventory:FindFirstChild("RightSide") and inventory.Inventory.RightSide.ScrollingFrame
+    if not rightSide then return nil end
+
+    local ItemsToSell = {
+        armors = {},
+        rings = {},
+        helmets = {},
+        legs = {},
+        spells = {},
+        sigils = {},
+        weapons = {}
+    }
+
+    local foundAny = false
+
+    for _, frame in ipairs(rightSide:GetChildren()) do
+        if frame:IsA("Frame") and frame:FindFirstChild("itemStats") then
+            local stats = frame.itemStats
+            local itemType = stats:FindFirstChild("itemType")
+            local itemRarity = stats:FindFirstChild("itemRarity")
+            local guid = stats:FindFirstChild("GUID")
+            if itemType and itemRarity and guid then
+                local rarityKey = itemRarity.Value:lower()
+                if SellRarities[rarityKey] then
+                    foundAny = true
+                    if ItemsToSell[itemType.Value] then
+                        table.insert(ItemsToSell[itemType.Value], guid.Value)
+                    end
+                end
+            end
+        end
+    end
+
+    if foundAny then
+        return ItemsToSell
+    else
+        return nil
+    end
+end
+
+local function AutoSellItems()
+    if not AutoSell then return end
+    if game.PlaceId ~= SellPlaceId then return end
+
+    local items = GetItemsToSell()
+    if not items then return end
+
+    ReplicatedStorage:WaitForChild("EquipBest"):FireServer()
+
+    ReplicatedStorage:WaitForChild("sellItems"):InvokeServer(items)
+
+    ReplicatedStorage:WaitForChild("EquipBest"):FireServer()
+end
+
+task.spawn(function()
+    while task.wait(1) do
+        if AutoSell and game.PlaceId == SellPlaceId then
+            AutoSellItems()
+        end
+    end
+end)
 
 -- =========================================================
 -- CONFIG
