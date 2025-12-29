@@ -1,1 +1,637 @@
-lol
+local function LoadModule(url)
+    local module
+    repeat
+        local success, result = pcall(function()
+            return loadstring(game:HttpGet(url))()
+        end)
+        if success then
+            module = result
+        else
+            warn("Module non chargé, retry dans 1s : "..url)
+            wait(1)
+        end
+    until module
+    return module
+end
+
+local player = game.Players.LocalPlayer
+repeat wait() until player and player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+--
+if getgenv().ReinjectLoaded then return end
+getgenv().ReinjectLoaded = true
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+local ScriptURL = "https://raw.githubusercontent.com/Omeghub/devOnly/refs/heads/main/devOnlyFabled"
+
+local queue = queue_on_teleport 
+           or (syn and syn.queue_on_teleport) 
+           or (fluxus and fluxus.queue_on_teleport) 
+           or queueonteleport
+
+if not queue then
+    return
+end
+
+local TeleportQueued = false
+
+LocalPlayer.OnTeleport:Connect(function()
+    if TeleportQueued then return end
+    TeleportQueued = true
+
+    queue([[
+        repeat task.wait() until game:IsLoaded()
+        task.wait(2)
+        loadstring(game:HttpGet("]]..ScriptURL..[[", true))()
+    ]])
+end)
+-- =========================================================
+-- UI
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/Omeghub/OmegaHubtest/refs/heads/main/UiSave"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/Omeghub/OmegaHubtest/refs/heads/main/Interface"))()
+
+local Window = Fluent:CreateWindow({
+   Title = "OmegaHub | Fabled-Legacy",
+   TabWidth = 160,
+   Size = UDim2.fromOffset(580, 460),
+   Theme = "Dark",
+   Acrylic = false,
+   MinimizeKey = Enum.KeyCode.End
+})
+
+local Tabs = {
+    Main = Window:AddTab({ Title = "Auto Farm", Icon = "swords" }),
+    Tower = Window:AddTab({ Title = "Infinite Towers", Icon = "sword" }),
+    Stats = Window:AddTab({ Title = "Stats", Icon = "trending-up" }),
+    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
+}
+-- =========================================================
+-- AUTO Farm
+repeat task.wait() until game:IsLoaded()
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local LocalPlayer = Players.LocalPlayer
+
+local AutoFarm = false
+local AutoSpell = false
+local AutoStartDungeon = false
+
+local AttackDelay = 1
+local SpellDelay = 0.05
+local HeightAboveMob = 25
+local TpSpeed = 200
+
+local Character, HRP, Humanoid
+local CurrentTarget
+local HeartbeatConnection
+
+local function GetModelRoot(model)
+    if model.PrimaryPart then return model.PrimaryPart end
+    for _, v in ipairs(model:GetDescendants()) do
+        if v:IsA("BasePart") and v.Name:lower():find("root") then
+            return v
+        end
+    end
+    for _, v in ipairs(model:GetDescendants()) do
+        if v:IsA("BasePart") then
+            return v
+        end
+    end
+end
+
+local function GetBestTarget(enemies)
+    local electroHum, electroRoot
+    local statues = {}
+    local closest, shortest = nil, math.huge
+
+    for _, mob in ipairs(enemies:GetChildren()) do
+        if mob:IsA("Model") then
+            local hum = mob:FindFirstChildOfClass("Humanoid")
+            local root = GetModelRoot(mob)
+
+            if hum and root and hum.Health > 0 then
+
+                if mob.Name == "Electro Elemental" then
+                    electroHum = hum
+                    electroRoot = root
+                end
+
+                if mob.Name:find("Powered Statue") then
+                    table.insert(statues, root)
+                end
+
+                local dist = (root.Position - HRP.Position).Magnitude
+                if dist < shortest then
+                    shortest = dist
+                    closest = root
+                end
+            end
+        end
+    end
+
+    if electroHum and electroHum.Health == 10000000 then
+        if #statues > 0 then
+            return statues[1]
+        end
+    end
+
+    if electroHum and electroHum.Health < 10000000 then
+        return electroRoot
+    end
+
+    if #statues > 0 then
+        return statues[1]
+    end
+
+    return closest
+end
+
+local function SetupCharacter(char)
+    Character = char
+    HRP = char:WaitForChild("HumanoidRootPart")
+    Humanoid = char:WaitForChild("Humanoid")
+
+    if HeartbeatConnection then
+        HeartbeatConnection:Disconnect()
+    end
+
+    HeartbeatConnection = RunService.Heartbeat:Connect(function()
+        if not AutoFarm or Humanoid.Health <= 0 then
+            CurrentTarget = nil
+            HRP.Velocity = Vector3.zero
+            return
+        end
+
+        local enemies = workspace:FindFirstChild("Enemies")
+        if not enemies then return end
+
+        local target = GetBestTarget(enemies)
+        if not target then
+            CurrentTarget = nil
+            HRP.Velocity = Vector3.zero
+            return
+        end
+
+        CurrentTarget = target
+
+        for _, p in ipairs(Character:GetDescendants()) do
+            if p:IsA("BasePart") then
+                p.CanCollide = false
+            end
+        end
+
+        local pos = target.Position + Vector3.new(0, HeightAboveMob, 0)
+        local dir = pos - HRP.Position
+        HRP.Velocity = dir.Magnitude > 2 and dir.Unit * TpSpeed or Vector3.zero
+
+        HRP.CFrame = CFrame.lookAt(
+            HRP.Position,
+            Vector3.new(target.Position.X, HRP.Position.Y, target.Position.Z)
+        )
+
+        task.spawn(function()
+            task.wait(AttackDelay)
+            if AutoFarm and CurrentTarget == target then
+                ReplicatedStorage.Swing:FireServer()
+            end
+        end)
+
+        if AutoSpell and (target.Position - HRP.Position).Magnitude < 35 then
+            local spellQ = LocalPlayer:FindFirstChild("spellQ")
+            local cdQ = LocalPlayer:FindFirstChild("cooldownQ")
+            if spellQ and spellQ.Value and cdQ and cdQ.Value <= 0 then
+            ReplicatedStorage.useSpell:FireServer("Q")
+            task.wait(SpellDelay)
+        end
+
+            local spellE = LocalPlayer:FindFirstChild("spellE")
+            local cdE = LocalPlayer:FindFirstChild("cooldownE")
+            if spellE and spellE.Value and cdE and cdE.Value <= 0 then
+            ReplicatedStorage.useSpell:FireServer("E")
+            task.wait(SpellDelay)
+        end
+
+
+            local spellR = LocalPlayer:FindFirstChild("spellR")
+            local cdR = LocalPlayer:FindFirstChild("cooldownR")
+            if spellR and spellR.Value and cdR and cdR.Value <= 0 then
+                ReplicatedStorage.useSpell:FireServer("R")
+                task.wait(SpellDelay)
+            end
+        end
+    end)
+end
+
+if LocalPlayer.Character then
+    SetupCharacter(LocalPlayer.Character)
+end
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+    task.wait(0.5)
+    SetupCharacter(char)
+end)
+
+Tabs.Main:AddToggle("AutoFarmTP", {
+    Title = "Auto Farm TP",
+    Default = false,
+    Callback = function(v)
+        AutoFarm = v
+        AutoStartDungeon = v
+    end
+})
+
+Tabs.Main:AddToggle("AutoSpell", {
+    Title = "Auto Spell Q / E",
+    Default = false,
+    Callback = function(v)
+        AutoSpell = v
+    end
+})
+
+Tabs.Main:AddSlider("HeightAboveMob", {
+    Title = "Height Above Mob",
+    Default = 25,
+    Min = 5,
+    Max = 35,
+    Rounding = 0,
+    Suffix = " studs",
+    Callback = function(Value)
+        HeightAboveMob = Value
+    end
+})
+
+
+-- =========================================================
+-- AUTO START DUNGEON
+-- =========================================================
+task.spawn(function()
+    while task.wait(1) do
+        if not AutoStartDungeon then continue end
+        local gui = LocalPlayer.PlayerGui
+        local main = gui and gui:FindFirstChild("mainGui")
+        local btn = main and main:FindFirstChild("startDungeon")
+        if btn and btn.Visible then
+            ReplicatedStorage.StartDungeon:FireServer(true)
+        end
+    end
+end)
+
+-- =========================================================
+-- AUTO RETRY (FIX)
+local AutoRetry = false
+local AutoRetryTask = nil
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+local function StartAutoRetry()
+    if AutoRetryTask then return end
+
+    AutoRetryTask = task.spawn(function()
+        while AutoRetry do
+            task.wait(0.5)
+
+            local gui = LocalPlayer:FindFirstChild("PlayerGui")
+            if not gui then continue end
+
+            local completionScreen = gui:FindFirstChild("CompletionScreen")
+            if not completionScreen then continue end
+
+            local failedFrame = completionScreen:FindFirstChild("failedFrame")
+            if not failedFrame then continue end
+
+            local retryBtn = failedFrame:FindFirstChild("Retry")
+            if retryBtn and retryBtn.Visible then
+                local voteRemote = ReplicatedStorage:FindFirstChild("voteRemote")
+                if voteRemote then
+                    voteRemote:FireServer("repeat")
+                end
+            end
+        end
+
+        AutoRetryTask = nil
+    end)
+end
+
+local function StopAutoRetry()
+    AutoRetry = false
+    AutoRetryTask = nil
+end
+
+Tabs.Main:AddToggle("AutoRetry", {
+    Title = "Auto Retry",
+    Default = false,
+    Callback = function(v)
+        AutoRetry = v
+        if v then
+            StartAutoRetry()
+        else
+            StopAutoRetry()
+        end
+    end
+})
+-- =========================================================
+-- SERVICES
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local HttpService = game:GetService("HttpService")
+
+local HttpRequest =
+    (syn and syn.request)
+    or (http and http.request)
+    or http_request
+    or request
+    or (fluxus and fluxus.request)
+
+if not HttpRequest then
+    error("❌ Executor incompatible : HTTP requests non supportées")
+end
+
+-- === Ignore certaines maps sans CompletionScreen ===
+local allowedPlace = true
+if game.PlaceId == 11872917490 then
+    warn("📌 Webhook désactivé dans cette map (11872917490) — pas de CompletionScreen détectable.")
+    allowedPlace = false
+end
+
+-- ===== Webhook et Discord ID =====
+local WebhookFile = "Webhook.txt"
+local WebhookUrl = ""
+if pcall(function() return readfile(WebhookFile) end) then
+    WebhookUrl = readfile(WebhookFile)
+end
+
+local DiscordIdFile = "DiscordID.txt"
+local DiscordID = ""
+if pcall(function() return readfile(DiscordIdFile) end) then
+    DiscordID = readfile(DiscordIdFile)
+end
+
+local Section = Tabs.Main:AddSection("Webhook")
+
+Tabs.Main:AddInput("DiscordWebhook", {
+    Title = "Discord Webhook",
+    Description = "Paste your Discord webhook here",
+    Default = WebhookUrl,
+    Placeholder = "https://discord.com/api/webhooks/...",
+    Numeric = false,
+    Finished = false,
+    Callback = function(value)
+        WebhookUrl = value
+        pcall(function() writefile(WebhookFile, value) end)
+    end
+})
+
+Tabs.Main:AddInput("DiscordID", {
+    Title = "Your Discord ID",
+    Description = "Paste your Discord ID",
+    Default = DiscordID,
+    Placeholder = "123456789012345678",
+    Numeric = false,
+    Finished = false,
+    Callback = function(value)
+        DiscordID = value
+        pcall(function() writefile(DiscordIdFile, value) end)
+    end
+})
+
+-- ===== Fonction HTTP =====
+local function postWebhook(payload)
+    if WebhookUrl == "" then return end
+    pcall(function()
+        HttpRequest({
+            Url = WebhookUrl,
+            Method = "POST",
+            Headers = { ["Content-Type"] = "application/json" },
+            Body = HttpService:JSONEncode(payload)
+        })
+    end)
+end
+
+-- ===== Dungeon et format =====
+local function getDungeonName()
+    local ds = workspace:FindFirstChild("DungeonSettings")
+    local session = ds and ds:FindFirstChild("SessionName")
+    return (session and session.Value ~= "" and session.Value) or "Unknown Dungeon"
+end
+
+local function formatNumber(num)
+    num = tonumber(num)
+    if not num then return "0" end
+
+    if num >= 1e15 then
+        return string.format("%.1fq", num / 1e15) -- Quadrillion
+    elseif num >= 1e12 then
+        return string.format("%.1fT", num / 1e12) -- Trillion
+    elseif num >= 1e9 then
+        return string.format("%.1fB", num / 1e9)  -- Billion
+    elseif num >= 1e6 then
+        return string.format("%.1fm", num / 1e6)  -- Million
+    elseif num >= 1e3 then
+        return string.format("%.1fk", num / 1e3)  -- Thousand
+    else
+        return tostring(num)
+    end
+end
+
+-- ===== Envoi du webhook =====
+local function sendDungeonWebhook(coins, expGained, elapsed, rewards)
+    local data = LocalPlayer:FindFirstChild("data")
+    if not data then return end
+
+    local level = data.level.Value
+    local exp = formatNumber(data.exp.Value)
+    local expReq = formatNumber(data.expReq.Value)
+    local dungeonName = getDungeonName()
+
+    local rewardFields = {}
+    local mentionPing = "" -- Ping vide par défaut
+
+    for _, r in ipairs(rewards) do
+        table.insert(rewardFields, {
+            name = r.name,
+            value = "**Rarity:** " .. r.rarity,
+            inline = true
+        })
+
+        -- Ping Discord si Legendary ou Heirloom
+        if DiscordID ~= "" and (r.rarity:lower() == "legendary" or r.rarity:lower() == "heirloom") then
+            mentionPing = "<@" .. DiscordID .. ">"
+        end
+    end
+
+    if #rewardFields == 0 then
+        table.insert(rewardFields, {
+            name = "Rewards",
+            value = "Aucune récompense",
+            inline = false
+        })
+    end
+
+    postWebhook({
+        content = mentionPing,
+        username = "Omega-Hub",
+        embeds = {
+            {
+                title = "✅ Round Completed!",
+                color = 5763719,
+                fields = {
+                    {
+                        name = "👤 Account Information",
+                        value =
+                            "**Name:** Omega-Hub\n" ..
+                            "**Current Level:** " .. level .. "\n" ..
+                            "**Level Progression:** " .. exp .. " / " .. expReq,
+                        inline = false
+                    },
+                    {
+                        name = "🗺️ Dungeon Stats",
+                        value =
+                            "**Name:** " .. dungeonName .. "\n" ..
+                            "**Time:** " .. elapsed .. "\n" ..
+                            "**Coins Gained:** " .. coins .. "\n" ..
+                            "**EXP Gained:** " .. expGained,
+                        inline = false
+                    }
+                }
+            },
+            {
+                title = "🎁 Rewards",
+                color = 3447003,
+                fields = rewardFields
+            }
+        },
+        footer = { text = "Omega-Hub • " .. os.date("%d/%m/%Y %H:%M") }
+    })
+end
+
+-- ===== Collecte des rewards =====
+local function fetchCompletionData()
+    local gui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not gui then return end
+
+    local screen = gui:FindFirstChild("CompletionScreen")
+    if not screen then return end
+
+    local border = screen:FindFirstChild("CompletionBorder")
+    if not border or not border.Visible then return end
+
+    local main = border:FindFirstChild("CompletionMain")
+    if not main then return end
+
+    local rewardFrame = main:FindFirstChild("RewardFrame")
+    if not rewardFrame then return end
+
+    local lastCount, stableTime, start = 0, 0, tick()
+    while tick() - start < 8 do
+        local count = #rewardFrame:GetChildren()
+        if count == lastCount then
+            stableTime += 0.1
+        else
+            stableTime = 0
+            lastCount = count
+        end
+        if stableTime >= 1 then break end
+        task.wait(0.1)
+    end
+
+    local rewards = {}
+    for _, frame in ipairs(rewardFrame:GetChildren()) do
+        if frame:IsA("Frame") then
+            local stats = frame:FindFirstChild("itemStats")
+            local nameVal = stats and stats:FindFirstChild("itemName")
+            if nameVal then
+                table.insert(rewards, { rarity = frame.Name, name = nameVal.Value })
+            end
+        end
+    end
+
+    local coins = main:FindFirstChild("CoinsValue") and main.CoinsValue.Text or "0"
+    local expGained = main:FindFirstChild("EXPValue") and main.EXPValue.Text or "0"
+    local elapsed = main:FindFirstChild("ElapsedValue") and main.ElapsedValue.Text or "0"
+
+    sendDungeonWebhook(coins, expGained, elapsed, rewards)
+end
+
+-- ===== Écoute de la fin de dungeon =====
+if allowedPlace then
+    local function listenCompletion()
+        local gui = LocalPlayer:WaitForChild("PlayerGui")
+        local screen = gui:FindFirstChild("CompletionScreen")
+        if not screen then return end
+        local border = screen:FindFirstChild("CompletionBorder")
+        if not border then return end
+
+        border:GetPropertyChangedSignal("Visible"):Connect(function()
+            if border.Visible then
+                task.wait(0.3)
+                fetchCompletionData()
+            end
+        end)
+    end
+
+    listenCompletion()
+end
+-- =========================================================
+-- AUTO STATS
+local AutoPhysical = false
+local AutoSpellStat = false
+local AutoHealth = false
+
+local function AddPoint(stat)
+    ReplicatedStorage.addSkillPoints:FireServer(stat, 1)
+end
+
+task.spawn(function()
+    while task.wait(0.2) do
+        
+        if not AutoPhysical and not AutoSpellStat and not AutoHealth then 
+            continue 
+        end
+        
+        local freeSP = LocalPlayer.data.freeSP.Value
+        if freeSP <= 0 then
+            task.wait(1)
+        else
+            if AutoPhysical then AddPoint("physical") end
+            if AutoSpellStat then AddPoint("spell") end
+            if AutoHealth then AddPoint("health") end
+        end
+    end
+end)
+
+
+Tabs.Stats:AddToggle("AutoPhysical", {
+    Title = "Auto Physical",
+    Default = false,
+    Callback = function(v) AutoPhysical = v end
+})
+
+Tabs.Stats:AddToggle("AutoSpellStat", {
+    Title = "Auto Spell",
+    Default = false,
+    Callback = function(v) AutoSpellStat = v end
+})
+
+Tabs.Stats:AddToggle("AutoHealth", {
+    Title = "Auto Health",
+    Default = false,
+    Callback = function(v) AutoHealth = v end
+})
+
+
+-- =========================================================
+-- CONFIG
+SaveManager:SetLibrary(Fluent)
+InterfaceManager:SetLibrary(Fluent)
+SaveManager:IgnoreThemeSettings()
+InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+SaveManager:BuildConfigSection(Tabs.Settings)
+SaveManager:LoadAutoloadConfig()
+Window:SelectTab(1)
