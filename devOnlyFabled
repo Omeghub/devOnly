@@ -76,6 +76,11 @@ local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local LocalPlayer = Players.LocalPlayer
+local RESTRICTED_PLACE = 11872917490
+
+local function IsRestrictedPlace()
+    return game.PlaceId == RESTRICTED_PLACE
+end
 
 local AutoFarm = false
 local AutoSpell = false
@@ -115,7 +120,6 @@ local function GetBestTarget(enemies)
             local root = GetModelRoot(mob)
 
             if hum and root and hum.Health > 0 then
-
                 if mob.Name == "Electro Elemental" then
                     electroHum = hum
                     electroRoot = root
@@ -134,10 +138,8 @@ local function GetBestTarget(enemies)
         end
     end
 
-    if electroHum and electroHum.Health == 10000000 then
-        if #statues > 0 then
-            return statues[1]
-        end
+    if electroHum and electroHum.Health == 10000000 and #statues > 0 then
+        return statues[1]
     end
 
     if electroHum and electroHum.Health < 10000000 then
@@ -161,9 +163,13 @@ local function SetupCharacter(char)
     end
 
     HeartbeatConnection = RunService.Heartbeat:Connect(function()
+
+        if IsRestrictedPlace() then
+            return
+        end
+
         if not AutoFarm or Humanoid.Health <= 0 then
             CurrentTarget = nil
-            HRP.Velocity = Vector3.zero
             return
         end
 
@@ -173,7 +179,6 @@ local function SetupCharacter(char)
         local target = GetBestTarget(enemies)
         if not target then
             CurrentTarget = nil
-            HRP.Velocity = Vector3.zero
             return
         end
 
@@ -202,24 +207,20 @@ local function SetupCharacter(char)
         end)
 
         if AutoSpell and (target.Position - HRP.Position).Magnitude < 35 then
-            local spellQ = LocalPlayer:FindFirstChild("spellQ")
-            local cdQ = LocalPlayer:FindFirstChild("cooldownQ")
-            if spellQ and spellQ.Value and cdQ and cdQ.Value <= 0 then
-            ReplicatedStorage.useSpell:FireServer("Q")
-            task.wait(SpellDelay)
-        end
+            local q, cq = LocalPlayer:FindFirstChild("spellQ"), LocalPlayer:FindFirstChild("cooldownQ")
+            if q and q.Value and cq and cq.Value <= 0 then
+                ReplicatedStorage.useSpell:FireServer("Q")
+                task.wait(SpellDelay)
+            end
 
-            local spellE = LocalPlayer:FindFirstChild("spellE")
-            local cdE = LocalPlayer:FindFirstChild("cooldownE")
-            if spellE and spellE.Value and cdE and cdE.Value <= 0 then
-            ReplicatedStorage.useSpell:FireServer("E")
-            task.wait(SpellDelay)
-        end
+            local e, ce = LocalPlayer:FindFirstChild("spellE"), LocalPlayer:FindFirstChild("cooldownE")
+            if e and e.Value and ce and ce.Value <= 0 then
+                ReplicatedStorage.useSpell:FireServer("E")
+                task.wait(SpellDelay)
+            end
 
-
-            local spellR = LocalPlayer:FindFirstChild("spellR")
-            local cdR = LocalPlayer:FindFirstChild("cooldownR")
-            if spellR and spellR.Value and cdR and cdR.Value <= 0 then
+            local r, cr = LocalPlayer:FindFirstChild("spellR"), LocalPlayer:FindFirstChild("cooldownR")
+            if r and r.Value and cr and cr.Value <= 0 then
                 ReplicatedStorage.useSpell:FireServer("R")
                 task.wait(SpellDelay)
             end
@@ -260,21 +261,22 @@ Tabs.Main:AddSlider("HeightAboveMob", {
     Max = 35,
     Rounding = 0,
     Suffix = " studs",
-    Callback = function(Value)
-        HeightAboveMob = Value
+    Callback = function(v)
+        HeightAboveMob = v
     end
 })
 
-
--- =========================================================
--- AUTO START DUNGEON
--- =========================================================
+------------------------------------------------------------
+-- AUTO START DUNGEON (DISABLED IN RESTRICTED PLACE)
 task.spawn(function()
     while task.wait(1) do
+        if IsRestrictedPlace() then continue end
         if not AutoStartDungeon then continue end
+
         local gui = LocalPlayer.PlayerGui
         local main = gui and gui:FindFirstChild("mainGui")
         local btn = main and main:FindFirstChild("startDungeon")
+
         if btn and btn.Visible then
             ReplicatedStorage.StartDungeon:FireServer(true)
         end
