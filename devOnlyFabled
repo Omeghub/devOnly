@@ -715,6 +715,7 @@ local function AutoSellItems()
     if not items then return end
 
     ReplicatedStorage:WaitForChild("EquipBest"):FireServer()
+    task.wait(2)
 
     ReplicatedStorage:WaitForChild("sellItems"):InvokeServer(items)
 
