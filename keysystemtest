@@ -1,0 +1,17 @@
+local key=_G.Key
+local Http=game:GetService("HttpService")
+local hwid=game:GetService("RbxAnalyticsService"):GetClientId()
+
+local r = request({
+    Url="http://127.0.0.1:3000/auth",
+    Method="POST",
+    Headers={["Content-Type"]="application/json"},
+    Body=Http:JSONEncode({key=key,hwid=hwid})
+})
+
+local data = Http:JSONDecode(r.Body)
+if not data.success then
+    return game.Players.LocalPlayer:Kick(data.msg)
+end
+
+print("✔ Auth valid — script execution...")
