@@ -97,9 +97,6 @@ local Character, HRP, Humanoid
 local CurrentTarget
 local HeartbeatConnection
 
-------------------------------------------------------------
--- MODEL ROOT
-------------------------------------------------------------
 local function GetModelRoot(model)
     if model.PrimaryPart then return model.PrimaryPart end
     for _, v in ipairs(model:GetDescendants()) do
@@ -114,9 +111,6 @@ local function GetModelRoot(model)
     end
 end
 
-------------------------------------------------------------
--- MOB PRIORITY
-------------------------------------------------------------
 local function GetBestTarget(enemies)
     local electroHum, electroRoot
     local statues = {}
@@ -243,7 +237,7 @@ if LocalPlayer.Character then
 end
 
 LocalPlayer.CharacterAdded:Connect(function(char)
-    task.wait(3) -- ⏱️ délai anti-bug après respawn
+    task.wait(1)
     SetupCharacter(char)
 end)
 
