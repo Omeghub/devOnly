@@ -589,6 +589,116 @@ if allowedPlace then
     listenCompletion()
 end
 -- =========================================================
+-- AUTO INFINITE TOWER
+repeat task.wait() until game:IsLoaded()
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+local Character, HRP
+
+local AutoInfiniteTower = false
+local SelectedPortals = {1, 2}
+local PromptDelay = 0.3
+local PortalDelay = 0.25
+local TreasureOffset = Vector3.new(0, 3, 0)
+
+local function SetupCharacter(char)
+    Character = char
+    HRP = char:WaitForChild("HumanoidRootPart")
+end
+
+if LocalPlayer.Character then
+    SetupCharacter(LocalPlayer.Character)
+end
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+    task.wait(1)
+    SetupCharacter(char)
+end)
+
+Tabs.Tower:AddToggle("AutoInfiniteTower", {
+    Title = "Auto Infinite Tower",
+    Default = false,
+    Callback = function(v)
+        AutoInfiniteTower = v
+    end
+})
+
+Tabs.Tower:AddDropdown("InfiniteTowerPortal", {
+    Title = "Infinite Tower Portal",
+    Description = "Select one or more portals",
+    Values = { "1", "2", "3" },
+    Multi = true,
+    Default = { "1", "2" },
+
+    Callback = function(values)
+        SelectedPortals = {}
+        for _, v in ipairs(values) do
+            table.insert(SelectedPortals, tonumber(v))
+        end
+    end
+})
+
+local function HandlePortals()
+    local gui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not gui then return end
+
+    local portalsGui = gui:FindFirstChild("Portals")
+    if not portalsGui then return end
+
+    local mainGroup = portalsGui:FindFirstChild("MainGroup")
+    if not mainGroup or not mainGroup.Visible then return end
+
+    for _, portalId in ipairs(SelectedPortals) do
+        ReplicatedStorage:WaitForChild("DisplayPortals"):FireServer(portalId)
+        task.wait(PortalDelay)
+    end
+end
+
+local function TpToTreasure()
+    if not HRP then return end
+
+    local treasure = workspace:FindFirstChild("Treasure")
+    if not treasure then return end
+
+    local ringPart = treasure:FindFirstChild("ringRewardsPart")
+    if not ringPart then return end
+
+    HRP.CFrame = ringPart.CFrame + TreasureOffset
+end
+
+local function FarmTowerRewards()
+    local treasure = workspace:FindFirstChild("Treasure")
+    if not treasure then return end
+
+    local ringPart = treasure:FindFirstChild("ringRewardsPart")
+    if not ringPart then return end
+
+    local promptFolder = ringPart:FindFirstChild("prompt")
+    if not promptFolder then return end
+
+    local prompt = promptFolder:FindFirstChildOfClass("ProximityPrompt")
+    if not prompt or not prompt.Enabled then return end
+
+    TpToTreasure()
+    task.wait(PromptDelay)
+
+    fireproximityprompt(prompt)
+end
+
+task.spawn(function()
+    while task.wait(0.3) do
+        if not AutoInfiniteTower then continue end
+
+        HandlePortals()
+
+        FarmTowerRewards()
+    end
+end)
+-- =========================================================
 -- AUTO STATS
 local AutoPhysical = false
 local AutoSpellStat = false
