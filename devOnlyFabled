@@ -242,6 +242,7 @@ LocalPlayer.CharacterAdded:Connect(function(char)
 end)
 
 
+
 Tabs.Main:AddToggle("AutoFarmTP", {
     Title = "Auto Farm TP",
     Default = false,
@@ -968,7 +969,7 @@ local function AutoSellItems()
     task.wait(9)
     ReplicatedStorage:WaitForChild("EquipBest"):FireServer()
     task.wait(8)
-    
+
     ReplicatedStorage:WaitForChild("sellItems"):InvokeServer(items)
 
     ReplicatedStorage:WaitForChild("EquipBest"):FireServer()
