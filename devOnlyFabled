@@ -346,7 +346,121 @@ Tabs.Main:AddToggle("AutoRetry", {
     end
 })
 -- =========================================================
--- SERVICES
+-- AUTO SMART SWITCH DUNGEON
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local LocalPlayer = Players.LocalPlayer
+
+local AutoSwitchDungeon = false
+local LastSwitchSignature = ""
+
+Tabs.Main:AddToggle("AutoSmartSwitch", {
+    Title = "Auto Switch Dungeon (Smart)",
+    Default = false,
+    Callback = function(v)
+        AutoSwitchDungeon = v
+    end
+})
+
+local DungeonOrder = {
+    "Raided Village",
+    "Sunken Fortress",
+    "Cursed Marshes",
+    "Ragnarök's Descent",
+    "Thundering Peaks",
+    "Fallen Paradise",
+    "Eternal Domain",
+    "Stardust Citadel",
+    "Ethereal Farlands",
+    "Hellbound Sanctum",
+    "Forsaken Limbo",
+    "Neon District"
+}
+
+local DungeonReqs = {
+    ["Raided Village"]     = {Normal=1,   Expert=5,   Chaos=10,  Calamity=15},
+    ["Sunken Fortress"]    = {Normal=20,  Expert=25,  Chaos=30,  Calamity=35},
+    ["Cursed Marshes"]     = {Normal=40,  Expert=45,  Chaos=50,  Calamity=55},
+    ["Ragnarök's Descent"] = {Normal=60,  Expert=65,  Chaos=70,  Calamity=75},
+    ["Thundering Peaks"]   = {Normal=80,  Expert=85,  Chaos=90,  Calamity=95},
+    ["Fallen Paradise"]    = {Normal=100, Expert=105, Chaos=110, Calamity=115},
+    ["Eternal Domain"]     = {Normal=120, Expert=125, Chaos=130, Calamity=135},
+    ["Stardust Citadel"]   = {Normal=140, Expert=145, Chaos=150, Calamity=155},
+    ["Ethereal Farlands"]  = {Normal=160, Expert=165, Chaos=170, Calamity=175},
+    ["Hellbound Sanctum"]  = {Normal=180, Expert=185, Chaos=190, Calamity=195},
+    ["Forsaken Limbo"]     = {Normal=200, Expert=205, Chaos=210, Calamity=215},
+    ["Neon District"]      = {Normal=220, Expert=225, Chaos=230, Calamity=235},
+}
+
+local DifficultyOrder = { "Normal", "Expert", "Chaos", "Calamity" }
+
+local function GetBestDungeonAndDifficulty(level)
+    local bestDungeon = nil
+    local bestDifficulty = nil
+
+    for _, dungeon in ipairs(DungeonOrder) do
+        for i = #DifficultyOrder, 1, -1 do
+            local diff = DifficultyOrder[i]
+            local req = DungeonReqs[dungeon][diff]
+
+            if level >= req then
+                bestDungeon = dungeon
+                bestDifficulty = diff
+                break
+            end
+        end
+    end
+
+    return bestDungeon, bestDifficulty
+end
+
+task.spawn(function()
+    while task.wait(2) do
+        if not AutoSwitchDungeon then continue end
+
+        local data = LocalPlayer:FindFirstChild("data")
+        local levelValue = data and data:FindFirstChild("level")
+        if not levelValue then continue end
+
+        local dungeonSettings = workspace:FindFirstChild("DungeonSettings")
+        if not dungeonSettings then continue end
+
+        local currentDungeon = dungeonSettings:FindFirstChild("SessionName")
+        local currentDifficulty = dungeonSettings:FindFirstChild("Difficulty")
+        if not currentDungeon or not currentDifficulty then continue end
+
+        local level = levelValue.Value
+        local bestDungeon, bestDifficulty = GetBestDungeonAndDifficulty(level)
+
+        if not bestDungeon or not bestDifficulty then continue end
+
+        local signature = bestDungeon .. "|" .. bestDifficulty
+        if signature == LastSwitchSignature then continue end
+
+        if currentDungeon.Value == bestDungeon and currentDifficulty.Value == bestDifficulty then
+            LastSwitchSignature = signature
+            continue
+        end
+
+        LastSwitchSignature = signature
+
+        ReplicatedStorage:WaitForChild("SwitchDungeon"):FireServer({
+            Map = bestDungeon,
+            Calamity = (bestDifficulty == "Calamity"),
+            Hardcore = false,
+            NoHit = false,
+            Difficulty = bestDifficulty,
+            LevelRequirement = level,
+            Tier = 0,
+            Private = false,
+            Easter = false
+        })
+    end
+end)
+-- =========================================================
+-- WebHook
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local HttpService = game:GetService("HttpService")
@@ -362,14 +476,12 @@ if not HttpRequest then
     error("❌ Executor incompatible : HTTP requests non supportées")
 end
 
--- === Ignore certaines maps sans CompletionScreen ===
 local allowedPlace = true
 if game.PlaceId == 11872917490 then
     warn("📌 Webhook désactivé dans cette map (11872917490) — pas de CompletionScreen détectable.")
     allowedPlace = false
 end
 
--- ===== Webhook et Discord ID =====
 local WebhookFile = "Webhook.txt"
 local WebhookUrl = ""
 if pcall(function() return readfile(WebhookFile) end) then
