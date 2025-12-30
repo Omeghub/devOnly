@@ -91,11 +91,15 @@ local AttackDelay = 1
 local SpellDelay = 0.05
 local HeightAboveMob = 25
 local TpSpeed = 200
+local SwingDistance = 35
 
 local Character, HRP, Humanoid
 local CurrentTarget
 local HeartbeatConnection
 
+------------------------------------------------------------
+-- MODEL ROOT
+------------------------------------------------------------
 local function GetModelRoot(model)
     if model.PrimaryPart then return model.PrimaryPart end
     for _, v in ipairs(model:GetDescendants()) do
@@ -110,6 +114,9 @@ local function GetModelRoot(model)
     end
 end
 
+------------------------------------------------------------
+-- MOB PRIORITY
+------------------------------------------------------------
 local function GetBestTarget(enemies)
     local electroHum, electroRoot
     local statues = {}
@@ -169,7 +176,7 @@ local function SetupCharacter(char)
             return
         end
 
-        if not AutoFarm or Humanoid.Health <= 0 then
+        if not AutoFarm or not Character or not HRP or not Humanoid or Humanoid.Health <= 0 then
             CurrentTarget = nil
             return
         end
@@ -202,7 +209,9 @@ local function SetupCharacter(char)
 
         task.spawn(function()
             task.wait(AttackDelay)
-            if AutoFarm and CurrentTarget == target then
+            if AutoFarm
+            and CurrentTarget == target
+            and (target.Position - HRP.Position).Magnitude <= SwingDistance then
                 ReplicatedStorage.Swing:FireServer()
             end
         end)
@@ -234,9 +243,11 @@ if LocalPlayer.Character then
 end
 
 LocalPlayer.CharacterAdded:Connect(function(char)
-    task.wait(0.5)
+    task.wait(3) -- ⏱️ délai anti-bug après respawn
     SetupCharacter(char)
 end)
+
+
 
 Tabs.Main:AddToggle("AutoFarmTP", {
     Title = "Auto Farm TP",
@@ -562,7 +573,6 @@ local function fetchCompletionData()
     sendDungeonWebhook(coins, expGained, elapsed, rewards)
 end
 
--- ===== Écoute de la fin de dungeon =====
 if allowedPlace then
     local function listenCompletion()
         local gui = LocalPlayer:WaitForChild("PlayerGui")
@@ -721,6 +731,7 @@ local function AutoSellItems()
 
     ReplicatedStorage:WaitForChild("EquipBest"):FireServer()
 end
+
 
 task.spawn(function()
     while task.wait(1) do
