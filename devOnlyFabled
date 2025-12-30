@@ -69,7 +69,7 @@ local Tabs = {
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
 -- =========================================================
--- AUTO FARM (FIX STARDUST CITADEL)
+-- AUTO Farm
 repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
@@ -96,51 +96,27 @@ local SwingDistance = 35
 local Character, HRP, Humanoid
 local CurrentTarget
 local HeartbeatConnection
-local LastTargetPos
 
 local function GetModelRoot(model)
     if model.PrimaryPart then return model.PrimaryPart end
-
     for _, v in ipairs(model:GetDescendants()) do
         if v:IsA("BasePart") and v.Name:lower():find("root") then
             return v
         end
     end
-
     for _, v in ipairs(model:GetDescendants()) do
         if v:IsA("BasePart") then
             return v
         end
     end
-
-    return nil
 end
 
-local function GetAllEnemies()
-    local list = {}
-
-    local enemiesFolder = workspace:FindFirstChild("Enemies")
-    if enemiesFolder then
-        for _, v in ipairs(enemiesFolder:GetChildren()) do
-            table.insert(list, v)
-        end
-    end
-
-    for _, v in ipairs(workspace:GetChildren()) do
-        if v:IsA("Model") and v:FindFirstChildOfClass("Humanoid") then
-            table.insert(list, v)
-        end
-    end
-
-    return list
-end
-
-local function GetBestTarget(enemyList)
+local function GetBestTarget(enemies)
     local electroHum, electroRoot
     local statues = {}
     local closest, shortest = nil, math.huge
 
-    for _, mob in ipairs(enemyList) do
+    for _, mob in ipairs(enemies:GetChildren()) do
         if mob:IsA("Model") then
             local hum = mob:FindFirstChildOfClass("Humanoid")
             local root = GetModelRoot(mob)
@@ -189,30 +165,26 @@ local function SetupCharacter(char)
     end
 
     HeartbeatConnection = RunService.Heartbeat:Connect(function()
-        if IsRestrictedPlace() then return end
-        if not AutoFarm or Humanoid.Health <= 0 then
+
+        if IsRestrictedPlace() then
+            return
+        end
+
+        if not AutoFarm or not Character or not HRP or not Humanoid or Humanoid.Health <= 0 then
             CurrentTarget = nil
             return
         end
 
-        local enemies = GetAllEnemies()
-        if #enemies == 0 then
-            CurrentTarget = nil
-            return
-        end
+        local enemies = workspace:FindFirstChild("Enemies")
+        if not enemies then return end
 
         local target = GetBestTarget(enemies)
-
         if not target then
-            if LastTargetPos then
-                local dir = LastTargetPos - HRP.Position
-                HRP.Velocity = dir.Magnitude > 2 and dir.Unit * TpSpeed or Vector3.zero
-            end
+            CurrentTarget = nil
             return
         end
 
         CurrentTarget = target
-        LastTargetPos = target.Position
 
         for _, p in ipairs(Character:GetDescendants()) do
             if p:IsA("BasePart") then
@@ -268,7 +240,6 @@ LocalPlayer.CharacterAdded:Connect(function(char)
     task.wait(1)
     SetupCharacter(char)
 end)
-
 
 Tabs.Main:AddToggle("AutoFarmTP", {
     Title = "Auto Farm TP",
