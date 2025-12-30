@@ -90,7 +90,7 @@ local AutoStartDungeon = false
 local AttackDelay = 1
 local SpellDelay = 0.05
 local HeightAboveMob = 25
-local TpSpeed = 16
+local TpSpeed = 200
 
 local Character, HRP, Humanoid
 local CurrentTarget
