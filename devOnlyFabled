@@ -69,7 +69,7 @@ local Tabs = {
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
 -- =========================================================
--- AUTO Farm
+-- AUTO FARM (SAFE + FORCE TP)
 repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
@@ -77,15 +77,14 @@ local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local LocalPlayer = Players.LocalPlayer
-local RESTRICTED_PLACE = 11872917490
 
+local RESTRICTED_PLACE = 11872917490
 local function IsRestrictedPlace()
     return game.PlaceId == RESTRICTED_PLACE
 end
 
 local AutoFarm = false
 local AutoSpell = false
-local AutoStartDungeon = false
 
 local AttackDelay = 1
 local SpellDelay = 0.05
@@ -93,9 +92,18 @@ local HeightAboveMob = 25
 local TpSpeed = 200
 local SwingDistance = 35
 
+local ForceTpDelay = 3        -- secondes sans progrès
+local ForceTpCooldown = 5    -- cooldown TP forcé
+
 local Character, HRP, Humanoid
 local CurrentTarget
 local HeartbeatConnection
+
+local LastProgressTime = tick()
+local LastDistance = math.huge
+local LastForceTp = 0
+local LastAttackTime = 0
+
 
 local function GetModelRoot(model)
     if model.PrimaryPart then return model.PrimaryPart end
@@ -105,15 +113,11 @@ local function GetModelRoot(model)
         end
     end
     for _, v in ipairs(model:GetDescendants()) do
-        if v:IsA("BasePart") then
-            return v
-        end
+        if v:IsA("BasePart") then return v end
     end
 end
 
 local function GetBestTarget(enemies)
-    local electroHum, electroRoot
-    local statues = {}
     local closest, shortest = nil, math.huge
 
     for _, mob in ipairs(enemies:GetChildren()) do
@@ -122,15 +126,6 @@ local function GetBestTarget(enemies)
             local root = GetModelRoot(mob)
 
             if hum and root and hum.Health > 0 then
-                if mob.Name == "Electro Elemental" then
-                    electroHum = hum
-                    electroRoot = root
-                end
-
-                if mob.Name:find("Powered Statue") then
-                    table.insert(statues, root)
-                end
-
                 local dist = (root.Position - HRP.Position).Magnitude
                 if dist < shortest then
                     shortest = dist
@@ -140,40 +135,28 @@ local function GetBestTarget(enemies)
         end
     end
 
-    if electroHum and electroHum.Health == 10000000 and #statues > 0 then
-        return statues[1]
-    end
-
-    if electroHum and electroHum.Health < 10000000 then
-        return electroRoot
-    end
-
-    if #statues > 0 then
-        return statues[1]
-    end
-
     return closest
 end
 
 local function SetupCharacter(char)
     Character = char
-    HRP = char:WaitForChild("HumanoidRootPart")
     Humanoid = char:WaitForChild("Humanoid")
+    HRP = char:WaitForChild("HumanoidRootPart")
+
+    LastProgressTime = tick()
+    LastDistance = math.huge
+    LastForceTp = 0
+    LastAttackTime = 0
 
     if HeartbeatConnection then
         HeartbeatConnection:Disconnect()
     end
 
     HeartbeatConnection = RunService.Heartbeat:Connect(function()
-
-        if IsRestrictedPlace() then
-            return
-        end
-
-        if not AutoFarm or not Character or not HRP or not Humanoid or Humanoid.Health <= 0 then
-            CurrentTarget = nil
-            return
-        end
+        if IsRestrictedPlace() then return end
+        if not AutoFarm then return end
+        if not Character or not HRP or not Humanoid then return end
+        if Humanoid.Health <= 0 then return end
 
         local enemies = workspace:FindFirstChild("Enemies")
         if not enemies then return end
@@ -192,14 +175,42 @@ local function SetupCharacter(char)
             end
         end
 
-        local pos = target.Position + Vector3.new(0, HeightAboveMob, 0)
-        local dir = pos - HRP.Position
-        HRP.Velocity = dir.Magnitude > 2 and dir.Unit * TpSpeed or Vector3.zero
+        local currentDist = (target.Position - HRP.Position).Magnitude
+        if currentDist < LastDistance - 1 then
+            LastProgressTime = tick()
+        end
+        LastDistance = currentDist
+
+        local desiredPos = target.Position + Vector3.new(0, HeightAboveMob, 0)
+        local dir = desiredPos - HRP.Position
+
+        if dir.Magnitude > 2 then
+            HRP.Velocity = dir.Unit * TpSpeed
+        else
+            HRP.Velocity = Vector3.zero
+        end
 
         HRP.CFrame = CFrame.lookAt(
             HRP.Position,
             Vector3.new(target.Position.X, HRP.Position.Y, target.Position.Z)
         )
+
+        if tick() - LastProgressTime >= ForceTpDelay
+        and tick() - LastForceTp >= ForceTpCooldown then
+
+            local offset = Vector3.new(
+                math.random(-3, 3),
+                HeightAboveMob,
+                math.random(-3, 3)
+            )
+
+            HRP.CFrame = CFrame.new(target.Position + offset)
+            HRP.Velocity = Vector3.zero
+
+            LastForceTp = tick()
+            LastProgressTime = tick()
+            LastDistance = math.huge
+        end
 
         task.spawn(function()
             task.wait(AttackDelay)
@@ -207,24 +218,25 @@ local function SetupCharacter(char)
             and CurrentTarget == target
             and (target.Position - HRP.Position).Magnitude <= SwingDistance then
                 ReplicatedStorage.Swing:FireServer()
+                LastAttackTime = tick()
             end
         end)
 
-        if AutoSpell and (target.Position - HRP.Position).Magnitude < 35 then
+        if AutoSpell and (target.Position - HRP.Position).Magnitude <= 35 then
             local q, cq = LocalPlayer:FindFirstChild("spellQ"), LocalPlayer:FindFirstChild("cooldownQ")
-            if q and q.Value and cq and cq.Value <= 0 then
+            if q and cq and cq.Value <= 0 then
                 ReplicatedStorage.useSpell:FireServer("Q")
                 task.wait(SpellDelay)
             end
 
             local e, ce = LocalPlayer:FindFirstChild("spellE"), LocalPlayer:FindFirstChild("cooldownE")
-            if e and e.Value and ce and ce.Value <= 0 then
+            if e and ce and ce.Value <= 0 then
                 ReplicatedStorage.useSpell:FireServer("E")
                 task.wait(SpellDelay)
             end
 
             local r, cr = LocalPlayer:FindFirstChild("spellR"), LocalPlayer:FindFirstChild("cooldownR")
-            if r and r.Value and cr and cr.Value <= 0 then
+            if r and cr and cr.Value <= 0 then
                 ReplicatedStorage.useSpell:FireServer("R")
                 task.wait(SpellDelay)
             end
@@ -237,9 +249,11 @@ if LocalPlayer.Character then
 end
 
 LocalPlayer.CharacterAdded:Connect(function(char)
-    task.wait(1)
+    task.wait(3) -- anti bug respawn
     SetupCharacter(char)
 end)
+
+
 
 Tabs.Main:AddToggle("AutoFarmTP", {
     Title = "Auto Farm TP",
