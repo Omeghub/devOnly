@@ -241,6 +241,7 @@ LocalPlayer.CharacterAdded:Connect(function(char)
     SetupCharacter(char)
 end)
 
+
 Tabs.Main:AddToggle("AutoFarmTP", {
     Title = "Auto Farm TP",
     Default = false,
@@ -282,7 +283,10 @@ task.spawn(function()
         local btn = main and main:FindFirstChild("startDungeon")
 
         if btn and btn.Visible then
-            ReplicatedStorage.StartDungeon:FireServer(true)
+            ReplicatedStorage:WaitForChild("EquipBest"):FireServer()
+            task.wait(3)
+
+            ReplicatedStorage:WaitForChild("StartDungeon"):FireServer(true)
         end
     end
 end)
@@ -706,9 +710,12 @@ local RunService = game:GetService("RunService")
 
 local LocalPlayer = Players.LocalPlayer
 local Character, HRP
-
 local AutoInfiniteTower = false
-local SelectedPortals = {1, 2}
+
+local UsePortal1 = true
+local UsePortal2 = true
+local UsePortal3 = false
+
 local PromptDelay = 0.3
 local PortalDelay = 0.25
 local TreasureOffset = Vector3.new(0, 3, 0)
@@ -735,18 +742,27 @@ Tabs.Tower:AddToggle("AutoInfiniteTower", {
     end
 })
 
-Tabs.Tower:AddDropdown("InfiniteTowerPortal", {
-    Title = "Infinite Tower Portal",
-    Description = "Select one or more portals",
-    Values = { "1", "2", "3" },
-    Multi = true,
-    Default = { "1", "2" },
+Tabs.Tower:AddToggle("Portal1", {
+    Title = "Use Portal 1",
+    Default = true,
+    Callback = function(v)
+        UsePortal1 = v
+    end
+})
 
-    Callback = function(values)
-        SelectedPortals = {}
-        for _, v in ipairs(values) do
-            table.insert(SelectedPortals, tonumber(v))
-        end
+Tabs.Tower:AddToggle("Portal2", {
+    Title = "Use Portal 2",
+    Default = true,
+    Callback = function(v)
+        UsePortal2 = v
+    end
+})
+
+Tabs.Tower:AddToggle("Portal3", {
+    Title = "Use Portal 3",
+    Default = false,
+    Callback = function(v)
+        UsePortal3 = v
     end
 })
 
@@ -760,8 +776,18 @@ local function HandlePortals()
     local mainGroup = portalsGui:FindFirstChild("MainGroup")
     if not mainGroup or not mainGroup.Visible then return end
 
-    for _, portalId in ipairs(SelectedPortals) do
-        ReplicatedStorage:WaitForChild("DisplayPortals"):FireServer(portalId)
+    if UsePortal1 then
+        ReplicatedStorage:WaitForChild("DisplayPortals"):FireServer(1)
+        task.wait(PortalDelay)
+    end
+
+    if UsePortal2 then
+        ReplicatedStorage:WaitForChild("DisplayPortals"):FireServer(2)
+        task.wait(PortalDelay)
+    end
+
+    if UsePortal3 then
+        ReplicatedStorage:WaitForChild("DisplayPortals"):FireServer(3)
         task.wait(PortalDelay)
     end
 end
@@ -802,7 +828,6 @@ task.spawn(function()
         if not AutoInfiniteTower then continue end
 
         HandlePortals()
-
         FarmTowerRewards()
     end
 end)
@@ -940,8 +965,10 @@ local function AutoSellItems()
     if not items then return end
 
     ReplicatedStorage:WaitForChild("EquipBest"):FireServer()
-    task.wait(3)
-
+    task.wait(9)
+    ReplicatedStorage:WaitForChild("EquipBest"):FireServer()
+    task.wait(8)
+    
     ReplicatedStorage:WaitForChild("sellItems"):InvokeServer(items)
 
     ReplicatedStorage:WaitForChild("EquipBest"):FireServer()
