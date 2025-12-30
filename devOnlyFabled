@@ -284,10 +284,14 @@ task.spawn(function()
         local btn = main and main:FindFirstChild("startDungeon")
 
         if btn and btn.Visible then
-            ReplicatedStorage.StartDungeon:FireServer(true)
+            ReplicatedStorage:WaitForChild("EquipBest"):FireServer()
+            task.wait(3)
+
+            ReplicatedStorage:WaitForChild("StartDungeon"):FireServer(true)
         end
     end
 end)
+
 
 
 -- =========================================================
