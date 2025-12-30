@@ -69,7 +69,8 @@ local Tabs = {
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
 -- =========================================================
--- AUTO FARM (SAFE + FORCE TP)
+-- AUTO FARM (FORCE TP IF STUCK BY IMMOBILITY)
+-- =========================================================
 repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
@@ -92,18 +93,17 @@ local HeightAboveMob = 25
 local TpSpeed = 200
 local SwingDistance = 35
 
-local ForceTpDelay = 3        -- secondes sans progrès
-local ForceTpCooldown = 5    -- cooldown TP forcé
+local StuckTime = 5           -- ⬅️ mets 10 si tu veux 10 secondes
+local StuckDistance = 1       -- distance mini pour considérer un mouvement
+local ForceTpCooldown = 5
 
 local Character, HRP, Humanoid
 local CurrentTarget
 local HeartbeatConnection
 
-local LastProgressTime = tick()
-local LastDistance = math.huge
+local LastPosition
+local LastMoveTime = tick()
 local LastForceTp = 0
-local LastAttackTime = 0
-
 
 local function GetModelRoot(model)
     if model.PrimaryPart then return model.PrimaryPart end
@@ -143,10 +143,9 @@ local function SetupCharacter(char)
     Humanoid = char:WaitForChild("Humanoid")
     HRP = char:WaitForChild("HumanoidRootPart")
 
-    LastProgressTime = tick()
-    LastDistance = math.huge
+    LastPosition = HRP.Position
+    LastMoveTime = tick()
     LastForceTp = 0
-    LastAttackTime = 0
 
     if HeartbeatConnection then
         HeartbeatConnection:Disconnect()
@@ -175,11 +174,11 @@ local function SetupCharacter(char)
             end
         end
 
-        local currentDist = (target.Position - HRP.Position).Magnitude
-        if currentDist < LastDistance - 1 then
-            LastProgressTime = tick()
+        local movedDistance = (HRP.Position - LastPosition).Magnitude
+        if movedDistance > StuckDistance then
+            LastMoveTime = tick()
+            LastPosition = HRP.Position
         end
-        LastDistance = currentDist
 
         local desiredPos = target.Position + Vector3.new(0, HeightAboveMob, 0)
         local dir = desiredPos - HRP.Position
@@ -195,7 +194,7 @@ local function SetupCharacter(char)
             Vector3.new(target.Position.X, HRP.Position.Y, target.Position.Z)
         )
 
-        if tick() - LastProgressTime >= ForceTpDelay
+        if tick() - LastMoveTime >= StuckTime
         and tick() - LastForceTp >= ForceTpCooldown then
 
             local offset = Vector3.new(
@@ -208,8 +207,8 @@ local function SetupCharacter(char)
             HRP.Velocity = Vector3.zero
 
             LastForceTp = tick()
-            LastProgressTime = tick()
-            LastDistance = math.huge
+            LastMoveTime = tick()
+            LastPosition = HRP.Position
         end
 
         task.spawn(function()
@@ -218,7 +217,6 @@ local function SetupCharacter(char)
             and CurrentTarget == target
             and (target.Position - HRP.Position).Magnitude <= SwingDistance then
                 ReplicatedStorage.Swing:FireServer()
-                LastAttackTime = tick()
             end
         end)
 
@@ -249,10 +247,9 @@ if LocalPlayer.Character then
 end
 
 LocalPlayer.CharacterAdded:Connect(function(char)
-    task.wait(3) -- anti bug respawn
+    task.wait(1)
     SetupCharacter(char)
 end)
-
 
 
 Tabs.Main:AddToggle("AutoFarmTP", {
