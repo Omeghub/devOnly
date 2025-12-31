@@ -9,7 +9,7 @@ end
 local req = syn and syn.request or http_request or request
 
 local response = req({
-    Url="http://127.0.0.1:3000/auth",
+    Url="https://allyson-unprevailing-fae.ngrok-free.dev/auth",
     Method="POST",
     Headers={["Content-Type"]="application/json"},
     Body=Http:JSONEncode({key=key,hwid=hwid})
