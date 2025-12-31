@@ -1,30 +1,64 @@
 local Http = game:GetService("HttpService")
 local hwid = game:GetService("RbxAnalyticsService"):GetClientId()
-local key = _G.Key
+local KEY_FILE = "OmegaAuthKey.txt"
+local key
 
-if not key then
-    return game.Players.LocalPlayer:Kick("⛔ Mets ta key : _G.Key = \"ta_key\"")
+--============================
+-- Charger la key du fichier
+--============================
+if isfile and isfile(KEY_FILE) then
+    key = readfile(KEY_FILE)
+    print("🔐 Key chargée automatiquement :", key)
+end
+
+-- Si aucune key enregistrée, demander via _G.Key
+if not key or key == "" then
+    if not _G.Key then
+        return game.Players.LocalPlayer:Kick("❌ Aucune key fournie ! Utilise : _G.Key = \"ta_key\"")
+    end
+    key = _G.Key
+    writefile(KEY_FILE, key)
+    print("💾 Key sauvegardée pour les prochaines fois !")
 end
 
 local req = syn and syn.request or http_request or request
 
 local response = req({
-    Url = "https://allyson-unprevailing-fae.ngrok-free.dev/auth",
+    Url = "https://allyson-unprevailing-fae.ngrok-free.dev/auth", -- 🔥 change selon ton ngrok
     Method = "POST",
     Headers = {["Content-Type"] = "application/json"},
-    Body = Http:JSONEncode({key=key, hwid=hwid})
+    Body = Http:JSONEncode({key = key, hwid = hwid})
 })
 
 local data = Http:JSONDecode(response.Body)
 
+--============================
+-- Gestion des erreurs avec messages spécifiques
+--============================
 if not data.success then
-    game.Players.LocalPlayer:Kick(data.msg)
-    return
+    -- Supprime la key locale si invalide
+    if isfile(KEY_FILE) then
+        delfile(KEY_FILE)
+    end
+
+    -- Messages clairs pour toi
+    local msg = data.msg or "❌ Key invalide ou erreur inconnue"
+    if msg:find("Key invalide") then
+        return game.Players.LocalPlayer:Kick("❌ Erreur : Key invalide")
+    elseif msg:find("HWID") then
+        return game.Players.LocalPlayer:Kick("❌ Erreur : HWID ne correspond pas")
+    elseif msg:find("expir") then
+        return game.Players.LocalPlayer:Kick("❌ Erreur : Key expirée")
+    else
+        return game.Players.LocalPlayer:Kick("❌ Erreur inconnue : "..msg)
+    end
 end
 
-print("✔ Auth valid — execution du script...")
+print("✔ Auth Valid — Accès Autorisé")
 
+--============================
 -- Décompte du temps restant
+--============================
 if data.expires then
     local expiryDate = DateTime.fromIsoDate(data.expires)
     local now = DateTime.now()
@@ -35,7 +69,12 @@ if data.expires then
     local minutes = math.floor((remaining % 3600) / 60)
     local seconds = remaining % 60
 
-    print(string.format("⏳ Temps restant : %dd %dh %dm %ds", days, hours, minutes, seconds))
+    print(string.format("⏳ Expire dans : %dd %dh %dm %ds", days, hours, minutes, seconds))
 else
     print("♾️ Lifetime")
 end
+
+--============================
+-- Place ton script après ici
+--============================
+print("👑 Systeme d'auth Omega prêt !")
