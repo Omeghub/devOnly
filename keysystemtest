@@ -78,6 +78,3 @@ end
 print("🚀 Script Loaded Successfully")
 print("=============================================")
 
--- ↓ Here start your main script / hub loader ↓
--- Example:
--- loadstring(game:HttpGet("https://your-script-hub.com/loader.lua"))()
