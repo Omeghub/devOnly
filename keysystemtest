@@ -1,12 +1,12 @@
---// ================== ROBLOX AUTH SYSTEM ================== //--
+--// ================== ROBLOX AUTH SYSTEM ================== //-- 
 
 local Http = game:GetService("HttpService")
 local hwid = game:GetService("RbxAnalyticsService"):GetClientId()
-local API_URL = "https://allyson-unprevailing-fae.ngrok-free.dev/auth" -- <--- CHANGE ICI
+local API_URL = "https://allyson-unprevailing-fae.ngrok-free.dev/auth" -- <--- Change this to your server URL
 
 local keyFile = "authkey.txt"
 
--- Load saved key
+-- Load saved key if exists
 local function loadKey()
     if isfile(keyFile) then
         return readfile(keyFile)
@@ -16,14 +16,15 @@ end
 local key = _G.Key or loadKey()
 
 if not key then
-    return game.Players.LocalPlayer:Kick("❗ Set your key first : _G.Key = \"YOUR_KEY\"")
+    return game.Players.LocalPlayer:Kick("❗ Set your key first: _G.Key = \"YOUR_KEY\"")
 end
 
--- Auto Save Key
+-- Auto save key
 pcall(function()
     writefile(keyFile, key)
 end)
 
+-- Select request function
 local request = syn and syn.request or http_request or request or (http and http.request)
 
 local response = request({
@@ -35,12 +36,12 @@ local response = request({
 
 local data = Http:JSONDecode(response.Body)
 
--- Error Handler
+-- Error Handling
 if not data.success then
     local msg = {
-        INVALID_KEY = "❌ Invalid Key",
+        INVALID = "❌ Invalid Key",
         EXPIRED = "⛔ Your Key Has Expired",
-        HWID_MISMATCH = "🛑 HWID Doesn't Match This Key",
+        HWID_MISMATCH = "🛑 HWID doesn't match",
         NO_KEY = "❗ No Key Provided"
     }
 
@@ -49,24 +50,27 @@ end
 
 print("🔐 Key Authorized Successfully")
 
--- Display Owner from webhook / claim
-if data.owner ~= "None" then
-    print("👤 Owner :", data.owner, "(Discord ID:", data.discordID .. ")")
+-- Display Owner Info
+local owner = data.owner or "None"
+local discordID = data.discordID or "N/A"
+
+if owner ~= "None" then
+    print("👤 Owner:", owner, "(Discord ID:", discordID, ")")
 else
     print("👤 No owner was detected for this key")
 end
 
--- Expiration Display
-if data.expires ~= "lifetime" then
+-- Expiration & Time Remaining
+if data.expires and data.expires ~= "lifetime" then
     local expiry = DateTime.fromIsoDate(data.expires)
     local remaining = expiry.UnixTimestamp - DateTime.now().UnixTimestamp
 
-    local d = math.floor(remaining/86400)
-    local h = math.floor((remaining%86400)/3600)
-    local m = math.floor((remaining%3600)/60)
+    local days = math.floor(remaining / 86400)
+    local hours = math.floor((remaining % 86400) / 3600)
+    local minutes = math.floor((remaining % 3600) / 60)
 
-    print("📅 Expires on :", data.expires)
-    print(string.format("⏳ Time Left: %d Days %d Hours %d Min", d, h, m))
+    print("📅 Expires on:", data.expires)
+    print(string.format("⏳ Time Left: %d Days %d Hours %d Min", days, hours, minutes))
 else
     print("♾ Lifetime Key")
 end
@@ -74,6 +78,6 @@ end
 print("🚀 Script Loaded Successfully")
 print("=============================================")
 
--- ↓ Here start your script (load UI, execute hub, etc) ↓
-
+-- ↓ Here start your main script / hub loader ↓
+-- Example:
 -- loadstring(game:HttpGet("https://your-script-hub.com/loader.lua"))()
