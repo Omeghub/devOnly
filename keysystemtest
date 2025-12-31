@@ -1,80 +1,64 @@
 local Http = game:GetService("HttpService")
 local hwid = game:GetService("RbxAnalyticsService"):GetClientId()
-local KEY_FILE = "OmegaAuthKey.txt"
-local key
+local keyFile = "authkey.txt"
 
---============================
--- Charger la key du fichier
---============================
-if isfile and isfile(KEY_FILE) then
-    key = readfile(KEY_FILE)
-    print("🔐 Key chargée automatiquement :", key)
-end
-
--- Si aucune key enregistrée, demander via _G.Key
-if not key or key == "" then
-    if not _G.Key then
-        return game.Players.LocalPlayer:Kick("❌ Aucune key fournie ! Utilise : _G.Key = \"ta_key\"")
+-- Load saved key if exists
+local function loadKey()
+    if isfile(keyFile) then
+        return readfile(keyFile)
     end
-    key = _G.Key
-    writefile(KEY_FILE, key)
-    print("💾 Key sauvegardée pour les prochaines fois !")
 end
+
+local key = _G.Key or loadKey()
+
+if not key then
+    return game.Players.LocalPlayer:Kick("❗ Insert your key before executing : _G.Key = \"YOUR_KEY\"")
+end
+
+-- Auto save key
+pcall(function()
+    writefile(keyFile, key)
+end)
 
 local req = syn and syn.request or http_request or request
-
 local response = req({
-    Url = "https://allyson-unprevailing-fae.ngrok-free.dev/auth", -- 🔥 change selon ton ngrok
+    Url = "https://allyson-unprevailing-fae.ngrok-free.dev/auth", -- Change URL
     Method = "POST",
-    Headers = {["Content-Type"] = "application/json"},
-    Body = Http:JSONEncode({key = key, hwid = hwid})
+    Headers = {["Content-Type"]="application/json"},
+    Body = Http:JSONEncode({key=key, hwid=hwid})
 })
 
 local data = Http:JSONDecode(response.Body)
 
---============================
--- Gestion des erreurs avec messages spécifiques
---============================
+-- Error handling (English)
 if not data.success then
-    -- Supprime la key locale si invalide
-    if isfile(KEY_FILE) then
-        delfile(KEY_FILE)
-    end
+    local reason = data.reason or "UNKNOWN"
 
-    -- Messages clairs pour toi
-    local msg = data.msg or "❌ Key invalide ou erreur inconnue"
-    if msg:find("Key invalide") then
-        return game.Players.LocalPlayer:Kick("❌ Erreur : Key invalide")
-    elseif msg:find("HWID") then
-        return game.Players.LocalPlayer:Kick("❌ Erreur : HWID ne correspond pas")
-    elseif msg:find("expir") then
-        return game.Players.LocalPlayer:Kick("❌ Erreur : Key expirée")
-    else
-        return game.Players.LocalPlayer:Kick("❌ Erreur inconnue : "..msg)
-    end
+    local message = ({
+        INVALID = "❌ Invalid key!",
+        EXPIRED = "⛔ Your key has expired!",
+        HWID_MISMATCH = "🛑 HWID mismatch!",
+        NO_KEY = "❗ No key provided!"
+    })[reason] or "Unknown error."
+
+    return game.Players.LocalPlayer:Kick(message)
 end
 
-print("✔ Auth Valid — Accès Autorisé")
+print("✔ Key Authorized")
 
---============================
--- Décompte du temps restant
---============================
+-- Expiration & time left
 if data.expires then
-    local expiryDate = DateTime.fromIsoDate(data.expires)
-    local now = DateTime.now()
-    local remaining = expiryDate.UnixTimestamp - now.UnixTimestamp
+    local expiry = DateTime.fromIsoDate(data.expires)
+    local remaining = expiry.UnixTimestamp - DateTime.now().UnixTimestamp
 
-    local days = math.floor(remaining / 86400)
-    local hours = math.floor((remaining % 86400) / 3600)
-    local minutes = math.floor((remaining % 3600) / 60)
-    local seconds = remaining % 60
+    local days = math.floor(remaining/86400)
+    local hours = math.floor((remaining%86400)/3600)
+    local minutes = math.floor((remaining%3600)/60)
 
-    print(string.format("⏳ Expire dans : %dd %dh %dm %ds", days, hours, minutes, seconds))
+    print("📅 Expires on : "..data.expiresReadable)
+    print(string.format("⏳ Time Left: %d days %d hours %d min", days, hours, minutes))
 else
-    print("♾️ Lifetime")
+    print("♾ Lifetime Key")
 end
 
---============================
--- Place ton script après ici
---============================
-print("👑 Systeme d'auth Omega prêt !")
+print(">>> Script Successfully Loaded 🚀 <<<")
