@@ -1,31 +1,41 @@
 local Http = game:GetService("HttpService")
 local hwid = game:GetService("RbxAnalyticsService"):GetClientId()
-local key = _G.Key  -- l'utilisateur met une key ici
+local key = _G.Key
 
-if not key then 
-	return game.Players.LocalPlayer:Kick("⛔ Mets ta key : _G.Key = \"ta_key\"") 
+if not key then
+    return game.Players.LocalPlayer:Kick("⛔ Mets ta key : _G.Key = \"ta_key\"")
 end
 
 local req = syn and syn.request or http_request or request
 
 local response = req({
-    Url="https://allyson-unprevailing-fae.ngrok-free.dev/auth",
-    Method="POST",
-    Headers={["Content-Type"]="application/json"},
-    Body=Http:JSONEncode({key=key,hwid=hwid})
+    Url = "https://allyson-unprevailing-fae.ngrok-free.dev/auth",
+    Method = "POST",
+    Headers = {["Content-Type"] = "application/json"},
+    Body = Http:JSONEncode({key=key, hwid=hwid})
 })
 
 local data = Http:JSONDecode(response.Body)
 
 if not data.success then
-	game.Players.LocalPlayer:Kick(data.msg)
-	return
+    game.Players.LocalPlayer:Kick(data.msg)
+    return
 end
 
 print("✔ Auth valid — execution du script...")
 
---=========================
--- TON SCRIPT APRES AUTH 
---=========================
+-- Décompte du temps restant
+if data.expires then
+    local expiryDate = DateTime.fromIsoDate(data.expires)
+    local now = DateTime.now()
+    local remaining = expiryDate.UnixTimestamp - now.UnixTimestamp
 
-print("Ton système de key est fonctionnel !")
+    local days = math.floor(remaining / 86400)
+    local hours = math.floor((remaining % 86400) / 3600)
+    local minutes = math.floor((remaining % 3600) / 60)
+    local seconds = remaining % 60
+
+    print(string.format("⏳ Temps restant : %dd %dh %dm %ds", days, hours, minutes, seconds))
+else
+    print("♾️ Lifetime")
+end
