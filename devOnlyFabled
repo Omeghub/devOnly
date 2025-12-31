@@ -68,21 +68,23 @@ local Tabs = {
     Sell = Window:AddTab({Title = "Sell", Icon = "layers" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
--- =========================================================
--- AUTO Farm
 repeat task.wait() until game:IsLoaded()
 
+-- SERVICES
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+-- PLAYER
 local LocalPlayer = Players.LocalPlayer
-local RESTRICTED_PLACE = 11872917490
 
+-- RESTRICTED PLACE
+local RESTRICTED_PLACE = 11872917490
 local function IsRestrictedPlace()
     return game.PlaceId == RESTRICTED_PLACE
 end
 
+-- SETTINGS
 local AutoFarm = false
 local AutoSpell = false
 local AutoStartDungeon = false
@@ -93,10 +95,20 @@ local HeightAboveMob = 25
 local TpSpeed = 200
 local SwingDistance = 35
 
+-- AFK RESET SETTINGS
+local AFK_RESET_TIME = 10 -- secondes sans bouger
+local MOVE_THRESHOLD = 1 -- distance minimale pour considérer un mouvement
+
+-- CHARACTER VARS
 local Character, HRP, Humanoid
 local CurrentTarget
 local HeartbeatConnection
 
+-- AFK TRACKING
+local LastMoveTime = tick()
+local LastPosition = nil
+
+-- FUNCTIONS
 local function GetModelRoot(model)
     if model.PrimaryPart then return model.PrimaryPart end
     for _, v in ipairs(model:GetDescendants()) do
@@ -160,17 +172,37 @@ local function SetupCharacter(char)
     HRP = char:WaitForChild("HumanoidRootPart")
     Humanoid = char:WaitForChild("Humanoid")
 
+    LastPosition = HRP.Position
+    LastMoveTime = tick()
+
     if HeartbeatConnection then
         HeartbeatConnection:Disconnect()
     end
 
     HeartbeatConnection = RunService.Heartbeat:Connect(function()
 
-        if IsRestrictedPlace() then
+        if IsRestrictedPlace() then return end
+
+        if not Character or not HRP or not Humanoid or Humanoid.Health <= 0 then
+            CurrentTarget = nil
             return
         end
 
-        if not AutoFarm or not Character or not HRP or not Humanoid or Humanoid.Health <= 0 then
+        -- 🔴 AFK RESET CHECK
+        local dist = (HRP.Position - LastPosition).Magnitude
+        if dist > MOVE_THRESHOLD then
+            LastMoveTime = tick()
+            LastPosition = HRP.Position
+        end
+
+        if tick() - LastMoveTime >= AFK_RESET_TIME then
+            warn("[AFK RESET] Player immobile trop longtemps")
+            Humanoid:TakeDamage(Humanoid.MaxHealth)
+            LastMoveTime = tick()
+            return
+        end
+
+        if not AutoFarm then
             CurrentTarget = nil
             return
         end
@@ -232,6 +264,7 @@ local function SetupCharacter(char)
     end)
 end
 
+-- CHARACTER HOOKS
 if LocalPlayer.Character then
     SetupCharacter(LocalPlayer.Character)
 end
@@ -240,8 +273,6 @@ LocalPlayer.CharacterAdded:Connect(function(char)
     task.wait(1)
     SetupCharacter(char)
 end)
-
-
 
 Tabs.Main:AddToggle("AutoFarmTP", {
     Title = "Auto Farm TP",
