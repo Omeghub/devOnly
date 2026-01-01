@@ -177,17 +177,23 @@ local function GetBestTarget(enemies)
 end
 
 local function GetRoseRoot()
-    local rose = workspace:FindFirstChild("Rose")
-    if not rose then return nil end
+    local roseFolder = workspace:FindFirstChild("Rose")
+    if not roseFolder then return nil end
 
-    if rose:IsA("Model") then
-        return GetModelRoot(rose)
-    elseif rose:IsA("BasePart") then
-        return rose
+    local hitbox = roseFolder:FindFirstChild("Hitbox")
+    if not hitbox then return nil end
+
+    if hitbox:IsA("Model") then
+        return GetModelRoot(hitbox)
+    end
+
+    if hitbox:IsA("BasePart") then
+        return hitbox
     end
 
     return nil
 end
+
 
 
 local function SetupCharacter(char)
@@ -229,7 +235,7 @@ local function SetupCharacter(char)
             CurrentTarget = nil
             return
         end
--- 🌹 PRIORITÉ ROSE
+
         local roseTarget = GetRoseRoot()
         local target
 
@@ -254,9 +260,16 @@ local function SetupCharacter(char)
             end
         end
 
-        local pos = target.Position + Vector3.new(0, HeightAboveMob, 0)
-        local dir = pos - HRP.Position
-        HRP.Velocity = dir.Magnitude > 2 and dir.Unit * TpSpeed or Vector3.zero
+        local pos
+        if target == roseTarget then
+            pos = target.Position + Vector3.new(0,1,0)
+        else
+            pos = target.Position + Vector3.new(0, HeightAboveMob, 0)
+        end
+
+local dir = pos - HRP.Position
+HRP.Velocity = dir.Magnitude > 2 and dir.Unit * TpSpeed or Vector3.zero
+
 
         HRP.CFrame = CFrame.lookAt(
             HRP.Position,
