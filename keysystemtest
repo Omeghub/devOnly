@@ -2,7 +2,7 @@
 
 local Http = game:GetService("HttpService")
 local hwid = game:GetService("RbxAnalyticsService"):GetClientId()
-local API_URL = "https://allyson-unprevailing-fae.ngrok-free.dev/auth" -- <--- Change this to your server URL
+local API_URL = "http://193.203.169.51/auth" -- <--- Change this to your server URL
 
 local keyFile = "authkey.txt"
 
