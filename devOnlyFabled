@@ -68,6 +68,8 @@ local Tabs = {
     Sell = Window:AddTab({Title = "Sell", Icon = "layers" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
+-- =========================================================
+-- AUTO Farm
 repeat task.wait() until game:IsLoaded()
 
 -- SERVICES
@@ -96,8 +98,14 @@ local TpSpeed = 200
 local SwingDistance = 35
 
 -- AFK RESET SETTINGS
-local AFK_RESET_TIME = 10 -- secondes sans bouger
-local MOVE_THRESHOLD = 1 -- distance minimale pour considérer un mouvement
+local AFK_RESET_TIME = 10 -- secondes
+local MOVE_THRESHOLD = 1
+
+-- ALLOWED DUNGEONS FOR AFK RESET
+local AllowedDungeons = {
+    ["Ethereal Farlands"] = true,
+    ["Stardust Citadel"] = true
+}
 
 -- CHARACTER VARS
 local Character, HRP, Humanoid
@@ -121,6 +129,16 @@ local function GetModelRoot(model)
             return v
         end
     end
+end
+
+local function IsAFKResetAllowed()
+    local settings = workspace:FindFirstChild("DungeonSettings")
+    if not settings then return false end
+
+    local sessionName = settings:FindFirstChild("SessionName")
+    if not sessionName or not sessionName.Value then return false end
+
+    return AllowedDungeons[sessionName.Value] == true
 end
 
 local function GetBestTarget(enemies)
@@ -182,24 +200,24 @@ local function SetupCharacter(char)
     HeartbeatConnection = RunService.Heartbeat:Connect(function()
 
         if IsRestrictedPlace() then return end
-
         if not Character or not HRP or not Humanoid or Humanoid.Health <= 0 then
             CurrentTarget = nil
             return
         end
 
-        -- 🔴 AFK RESET CHECK
-        local dist = (HRP.Position - LastPosition).Magnitude
-        if dist > MOVE_THRESHOLD then
-            LastMoveTime = tick()
-            LastPosition = HRP.Position
-        end
+        if IsAFKResetAllowed() then
+            local dist = (HRP.Position - LastPosition).Magnitude
+            if dist > MOVE_THRESHOLD then
+                LastMoveTime = tick()
+                LastPosition = HRP.Position
+            end
 
-        if tick() - LastMoveTime >= AFK_RESET_TIME then
-            warn("[AFK RESET] Player immobile trop longtemps")
-            Humanoid:TakeDamage(Humanoid.MaxHealth)
-            LastMoveTime = tick()
-            return
+            if tick() - LastMoveTime >= AFK_RESET_TIME then
+                warn("[AFK RESET] Dungeon:", workspace.DungeonSettings.SessionName.Value)
+                Humanoid:TakeDamage(Humanoid.MaxHealth)
+                LastMoveTime = tick()
+                return
+            end
         end
 
         if not AutoFarm then
@@ -264,7 +282,6 @@ local function SetupCharacter(char)
     end)
 end
 
--- CHARACTER HOOKS
 if LocalPlayer.Character then
     SetupCharacter(LocalPlayer.Character)
 end
@@ -273,6 +290,7 @@ LocalPlayer.CharacterAdded:Connect(function(char)
     task.wait(1)
     SetupCharacter(char)
 end)
+
 
 Tabs.Main:AddToggle("AutoFarmTP", {
     Title = "Auto Farm TP",
