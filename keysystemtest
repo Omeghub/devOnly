@@ -1,12 +1,9 @@
---// ================== ROBLOX AUTH SYSTEM ================== //-- 
-
 local Http = game:GetService("HttpService")
 local hwid = game:GetService("RbxAnalyticsService"):GetClientId()
 local API_URL = "http://193.203.169.51/auth" -- <--- Change this to your server URL
 
-local keyFile = "authkey.txt"
+local keyFile = "Omegakey.txt"
 
--- Load saved key if exists
 local function loadKey()
     if isfile(keyFile) then
         return readfile(keyFile)
@@ -19,9 +16,9 @@ if not key then
     return game.Players.LocalPlayer:Kick("❗ Set your key first: _G.Key = \"YOUR_KEY\"")
 end
 
--- Auto save key
 pcall(function()
     writefile(keyFile, key)
+    print("[KEY SAVED] ✔")
 end)
 
 -- Select request function
@@ -36,7 +33,6 @@ local response = request({
 
 local data = Http:JSONDecode(response.Body)
 
--- Error Handling
 if not data.success then
     local msg = {
         INVALID = "❌ Invalid Key",
@@ -48,19 +44,13 @@ if not data.success then
     return game.Players.LocalPlayer:Kick(msg[data.reason] or "Unknown Error")
 end
 
-print("🔐 Key Authorized Successfully")
-
--- Display Owner Info
 local owner = data.owner or "None"
 local discordID = data.discordID or "N/A"
 
 if owner ~= "None" then
-    print("👤 Owner:", owner, "(Discord ID:", discordID, ")")
-else
-    print("👤 No owner was detected for this key")
+else 
 end
 
--- Expiration & Time Remaining
 if data.expires and data.expires ~= "lifetime" then
     local expiry = DateTime.fromIsoDate(data.expires)
     local remaining = expiry.UnixTimestamp - DateTime.now().UnixTimestamp
@@ -68,13 +58,8 @@ if data.expires and data.expires ~= "lifetime" then
     local days = math.floor(remaining / 86400)
     local hours = math.floor((remaining % 86400) / 3600)
     local minutes = math.floor((remaining % 3600) / 60)
-
-    print("📅 Expires on:", data.expires)
-    print(string.format("⏳ Time Left: %d Days %d Hours %d Min", days, hours, minutes))
 else
-    print("♾ Lifetime Key")
 end
 
-print("🚀 Script Loaded Successfully")
-print("=============================================")
+print("\nAUTH SUCCESS ✔")
 
