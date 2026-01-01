@@ -176,6 +176,20 @@ local function GetBestTarget(enemies)
     return closest
 end
 
+local function GetRoseRoot()
+    local rose = workspace:FindFirstChild("Rose")
+    if not rose then return nil end
+
+    if rose:IsA("Model") then
+        return GetModelRoot(rose)
+    elseif rose:IsA("BasePart") then
+        return rose
+    end
+
+    return nil
+end
+
+
 local function SetupCharacter(char)
     Character = char
     HRP = char:WaitForChild("HumanoidRootPart")
@@ -215,11 +229,18 @@ local function SetupCharacter(char)
             CurrentTarget = nil
             return
         end
+-- 🌹 PRIORITÉ ROSE
+        local roseTarget = GetRoseRoot()
+        local target
 
-        local enemies = workspace:FindFirstChild("Enemies")
+        if roseTarget then
+            target = roseTarget
+        else
+            local enemies = workspace:FindFirstChild("Enemies")
         if not enemies then return end
+            target = GetBestTarget(enemies)
+        end
 
-        local target = GetBestTarget(enemies)
         if not target then
             CurrentTarget = nil
             return
