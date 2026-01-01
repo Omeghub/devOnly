@@ -939,7 +939,7 @@ for _, r in ipairs(OrderedRarities) do
 end
 
 Tabs.Sell:AddToggle("AutoSellToggle", {
-    Title = "Auto Sell",
+    Title = "Auto Sell + Dungeon",
     Default = false,
     Callback = function(v)
         AutoSell = v
