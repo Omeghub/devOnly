@@ -99,7 +99,8 @@ local MOVE_THRESHOLD = 1
 local AllowedDungeons = {
     ["Ethereal Farlands"] = true,
     ["Stardust Citadel"] = true,
-    ["Neon District"] = true
+    ["Neon District"] = true,
+    ["Forsaken Limbo"] = true
 }
 
 local Character, HRP, Humanoid
