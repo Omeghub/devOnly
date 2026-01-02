@@ -77,9 +77,9 @@ local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local LocalPlayer = Players.LocalPlayer
-
 local RESTRICTED_PLACE = 11872917490
 
+-- SETTINGS
 local AutoFarm = false
 local AutoSpell = false
 local AutoStartDungeon = false
@@ -109,14 +109,16 @@ local DungeonStartDelay = {
     ["Neon District"] = 10
 }
 
+-- VARIABLES
 local Character, HRP, Humanoid
 local HeartbeatConnection
 local CurrentTarget
-
 local LastPosition
 local StuckStart
 local DungeonStarted = false
+local CarryStartTime = nil
 
+-- FUNCTIONS
 local function IsRestrictedPlace()
     return game.PlaceId == RESTRICTED_PLACE
 end
@@ -130,9 +132,7 @@ end
 local function GetModelRoot(model)
     if model.PrimaryPart then return model.PrimaryPart end
     for _, v in ipairs(model:GetDescendants()) do
-        if v:IsA("BasePart") then
-            return v
-        end
+        if v:IsA("BasePart") then return v end
     end
 end
 
@@ -150,7 +150,6 @@ end
 
 local function GetBestTarget(enemies)
     local closest, dist = nil, math.huge
-
     for _, mob in ipairs(enemies:GetChildren()) do
         if mob:IsA("Model") then
             local hum = mob:FindFirstChildOfClass("Humanoid")
@@ -164,7 +163,6 @@ local function GetBestTarget(enemies)
             end
         end
     end
-
     return closest
 end
 
@@ -175,71 +173,61 @@ local function GetRoseRoot()
     return hitbox:IsA("Model") and GetModelRoot(hitbox) or hitbox
 end
 
+-- CHARACTER SETUP
 local function SetupCharacter(char)
     Character = char
     HRP = char:WaitForChild("HumanoidRootPart")
     Humanoid = char:WaitForChild("Humanoid")
-
     LastPosition = HRP.Position
     StuckStart = nil
     DungeonStarted = false
+    CarryStartTime = nil
 
     if HeartbeatConnection then
         HeartbeatConnection:Disconnect()
     end
 
-    HeartbeatConnection = RunService.Heartbeat:Connect(function()
+    local stuckTime = 0
+    HeartbeatConnection = RunService.Heartbeat:Connect(function(dt)
         if IsRestrictedPlace() then return end
         if not Character or Humanoid.Health <= 0 then return end
 
+        -- CarryMode (attente 1:30)
         if CarryMode then
-            local timeLeft = GetDungeonTimeLeft()
-            if not timeLeft or timeLeft > CARRY_DELAY then
-                return
+            if not CarryStartTime then
+                CarryStartTime = tick()
             end
+            if tick() - CarryStartTime < CARRY_DELAY then
+                return -- attendre avant de commencer le TP/auto-farm
+            end
+        else
+            CarryStartTime = nil
         end
 
         if not AutoFarm then return end
 
+        -- TARGET
         local target = GetRoseRoot()
         if not target then
             local enemies = workspace:FindFirstChild("Enemies")
-            if not enemies then return end
-            target = GetBestTarget(enemies)
+            if enemies then target = GetBestTarget(enemies) end
         end
         if not target then return end
         CurrentTarget = target
 
+        -- disable collisions
         for _, p in ipairs(Character:GetDescendants()) do
-            if p:IsA("BasePart") then
-                p.CanCollide = false
-            end
+            if p:IsA("BasePart") then p.CanCollide = false end
         end
 
+        -- MOVE / TP
         local offset = (target == GetRoseRoot()) and 1 or HeightAboveMob
         local pos = target.Position + Vector3.new(0, offset, 0)
         local dir = pos - HRP.Position
         HRP.Velocity = dir.Magnitude > 2 and dir.Unit * TpSpeed or Vector3.zero
+        HRP.CFrame = CFrame.lookAt(HRP.Position, Vector3.new(target.Position.X, HRP.Position.Y, target.Position.Z))
 
-        HRP.CFrame = CFrame.lookAt(
-            HRP.Position,
-            Vector3.new(target.Position.X, HRP.Position.Y, target.Position.Z)
-        )
-
-        if DungeonStarted then
-            local moved = (HRP.Position - LastPosition).Magnitude
-            if moved < 0.1 then
-                StuckStart = StuckStart or tick()
-                if tick() - StuckStart >= STUCK_TIME then
-                    ReplicatedStorage.DungeonFail:FireServer()
-                    StuckStart = nil
-                end
-            else
-                StuckStart = nil
-                LastPosition = HRP.Position
-            end
-        end
-
+        -- ATTACK
         task.delay(AttackDelay, function()
             if AutoFarm and CurrentTarget == target
             and (target.Position - HRP.Position).Magnitude <= SwingDistance then
@@ -247,6 +235,7 @@ local function SetupCharacter(char)
             end
         end)
 
+        -- SPELLS
         if AutoSpell then
             for _, k in ipairs({"Q","E","R"}) do
                 local s = LocalPlayer:FindFirstChild("spell"..k)
@@ -257,19 +246,59 @@ local function SetupCharacter(char)
                 end
             end
         end
+
+        -- STUCK DETECTION
+        local distanceMoved = (HRP.Position - LastPosition).Magnitude
+        if distanceMoved < MOVE_THRESHOLD then
+            stuckTime = stuckTime + dt
+            if stuckTime >= STUCK_TIME then
+                if ReplicatedStorage:FindFirstChild("DungeonFail") then
+                    ReplicatedStorage.DungeonFail:FireServer()
+                end
+                stuckTime = 0
+            end
+        else
+            stuckTime = 0
+            LastPosition = HRP.Position
+        end
     end)
 end
 
+-- INITIAL SETUP
 if LocalPlayer.Character then
     SetupCharacter(LocalPlayer.Character)
 end
-
 LocalPlayer.CharacterAdded:Connect(function(char)
     task.wait(1)
     SetupCharacter(char)
 end)
 
+-- AUTO START DUNGEON
+task.spawn(function()
+    while task.wait(1) do
+        if IsRestrictedPlace() or not AutoStartDungeon then
+            DungeonStarted = false
+            continue
+        end
 
+        local gui = LocalPlayer.PlayerGui
+        local main = gui and gui:FindFirstChild("mainGui")
+        local btn = main and main:FindFirstChild("startDungeon")
+
+        if btn and btn.Visible and not DungeonStarted then
+            local delay = DungeonStartDelay[GetSessionName()] or 0
+            task.wait(delay)
+
+            ReplicatedStorage.EquipBest:FireServer()
+            task.wait(3)
+            ReplicatedStorage.StartDungeon:FireServer(true)
+
+            DungeonStarted = true
+        end
+    end
+end)
+
+-- UI TOGGLES
 Tabs.Main:AddToggle("AutoFarmTP", {
     Title = "Auto Farm TP",
     Default = false,
@@ -306,31 +335,6 @@ Tabs.Main:AddSlider("HeightAboveMob", {
         HeightAboveMob = v
     end
 })
--- =========================================================
--- AUTO START DUNGEON (SAFE)
-task.spawn(function()
-    while task.wait(1) do
-        if IsRestrictedPlace() or not AutoStartDungeon then
-            DungeonStarted = false
-            continue
-        end
-
-        local gui = LocalPlayer.PlayerGui
-        local main = gui and gui:FindFirstChild("mainGui")
-        local btn = main and main:FindFirstChild("startDungeon")
-
-        if btn and btn.Visible and not DungeonStarted then
-            local delay = DungeonStartDelay[GetSessionName()] or 0
-            task.wait(delay)
-
-            ReplicatedStorage.EquipBest:FireServer()
-            task.wait(3)
-            ReplicatedStorage.StartDungeon:FireServer(true)
-
-            DungeonStarted = true
-        end
-    end
-end)
 -- =========================================================
 -- AUTO RETRY (SAFE WITH AUTO SELL)
 local AutoRetry = false
