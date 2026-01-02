@@ -69,7 +69,7 @@ local Tabs = {
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
 -- =========================================================
--- AUTO FARM TP + AUTO START + CARRY (FULL VERSION)
+-- AUTO FARM TP + AUTO START + CARRY (FULL SAFE VERSION)
 repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
@@ -113,10 +113,11 @@ local DungeonStartDelay = {
 local Character, HRP, Humanoid
 local HeartbeatConnection
 local CurrentTarget
-local LastPosition
 local DungeonStarted = false
 local CarryStartTime = nil
 local LastSwingTime = 0
+local StuckRefPosition = nil
+local StuckTimer = 0
 
 -- FUNCTIONS
 local function IsRestrictedPlace()
@@ -178,16 +179,16 @@ local function SetupCharacter(char)
     Character = char
     HRP = char:WaitForChild("HumanoidRootPart")
     Humanoid = char:WaitForChild("Humanoid")
-    LastPosition = HRP.Position
+
     DungeonStarted = false
     CarryStartTime = nil
     LastSwingTime = 0
+    StuckRefPosition = HRP.Position
+    StuckTimer = 0
 
     if HeartbeatConnection then
         HeartbeatConnection:Disconnect()
     end
-
-    local stuckTime = 0
 
     HeartbeatConnection = RunService.Heartbeat:Connect(function(dt)
         if IsRestrictedPlace() then return end
@@ -199,7 +200,7 @@ local function SetupCharacter(char)
                 CarryStartTime = tick()
             end
             if tick() - CarryStartTime < CARRY_DELAY then
-                return -- attendre avant de commencer le TP/auto-farm
+                return -- attendre avant TP/auto-farm
             end
         else
             CarryStartTime = nil
@@ -216,7 +217,7 @@ local function SetupCharacter(char)
         if not target then return end
         CurrentTarget = target
 
-        -- disable collisions
+        -- COLLISIONS
         for _, p in ipairs(Character:GetDescendants()) do
             if p:IsA("BasePart") then p.CanCollide = false end
         end
@@ -249,20 +250,20 @@ local function SetupCharacter(char)
             end
         end
 
-        -- STUCK DETECTION (ignore si tu attaques)
-        local distanceMoved = (HRP.Position - LastPosition).Magnitude
+        -- STUCK DETECTION (immobile ET pas d’attaque)
+        local distanceMoved = (HRP.Position - StuckRefPosition).Magnitude
         local timeSinceSwing = tick() - (LastSwingTime or 0)
         if distanceMoved < MOVE_THRESHOLD and timeSinceSwing > 1 then
-            stuckTime = stuckTime + dt
-            if stuckTime >= STUCK_TIME then
+            StuckTimer = StuckTimer + dt
+            if StuckTimer >= STUCK_TIME then
                 if ReplicatedStorage:FindFirstChild("DungeonFail") then
                     ReplicatedStorage.DungeonFail:FireServer()
                 end
-                stuckTime = 0
+                StuckTimer = 0
             end
         else
-            stuckTime = 0
-            LastPosition = HRP.Position
+            StuckTimer = 0
+            StuckRefPosition = HRP.Position
         end
     end)
 end
