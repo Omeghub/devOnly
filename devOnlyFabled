@@ -69,7 +69,7 @@ local Tabs = {
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
 -- =========================================================
--- AUTO FARM TP + AUTO START + CARRY (FULL SAFE VERSION)
+-- AUTO FARM TP + AUTO START + CARRY (VERSION)
 repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
@@ -95,6 +95,20 @@ local CARRY_DELAY = 90 -- 1:30
 local STUCK_TIME = 5
 local MOVE_THRESHOLD = 1
 
+local AllowedDungeons = {
+    ["Ethereal Farlands"] = true,
+    ["Stardust Citadel"] = true,
+    ["Forsaken Limbo"] = true,
+    ["Neon District"] = true
+}
+
+local DungeonStartDelay = {
+    ["Ethereal Farlands"] = 10,
+    ["Stardust Citadel"] = 10,
+    ["Forsaken Limbo"] = 10,
+    ["Neon District"] = 10
+}
+
 -- VARIABLES
 local Character, HRP, Humanoid
 local HeartbeatConnection
@@ -105,22 +119,36 @@ local LastSwingTime = 0
 local StuckRefPosition = nil
 local StuckTimer = 0
 
--- =========================================================
 -- FUNCTIONS
 local function IsRestrictedPlace()
     return game.PlaceId == RESTRICTED_PLACE
 end
 
+local function GetSessionName()
+    local settings = workspace:FindFirstChild("DungeonSettings")
+    local session = settings and settings:FindFirstChild("SessionName")
+    return session and session.Value
+end
+
 local function GetModelRoot(model)
     if model.PrimaryPart then return model.PrimaryPart end
     for _, v in ipairs(model:GetDescendants()) do
-        if v:IsA("BasePart") then
-            return v
-        end
+        if v:IsA("BasePart") then return v end
     end
 end
 
--- ✅ VERSION CORRIGÉE / PRIORITÉ ELECTRO + STATUES
+local function GetDungeonTimeLeft()
+    local gui = LocalPlayer:FindFirstChild("PlayerGui")
+    local timer = gui and gui:FindFirstChild("DungeonTimer")
+    local frame = timer and timer:FindFirstChild("Frame")
+    local label = frame and frame:FindFirstChild("TextLabel")
+    if not label then return nil end
+
+    local m, s = label.Text:match("(%d+):(%d+)")
+    if not m then return nil end
+    return tonumber(m) * 60 + tonumber(s)
+end
+
 local function GetBestTarget(enemies)
     local electroHum, electroRoot
     local statues = {}
@@ -150,7 +178,6 @@ local function GetBestTarget(enemies)
         end
     end
 
-    -- 🔥 LOGIQUE PRIORITAIRE
     if electroHum and electroHum.Health == 10000000 and #statues > 0 then
         return statues[1]
     end
@@ -166,6 +193,7 @@ local function GetBestTarget(enemies)
     return closest
 end
 
+
 local function GetRoseRoot()
     local rose = workspace:FindFirstChild("Rose")
     local hitbox = rose and rose:FindFirstChild("Hitbox")
@@ -173,13 +201,13 @@ local function GetRoseRoot()
     return hitbox:IsA("Model") and GetModelRoot(hitbox) or hitbox
 end
 
--- =========================================================
 -- CHARACTER SETUP
 local function SetupCharacter(char)
     Character = char
     HRP = char:WaitForChild("HumanoidRootPart")
     Humanoid = char:WaitForChild("Humanoid")
 
+    DungeonStarted = false
     CarryStartTime = nil
     LastSwingTime = 0
     StuckRefPosition = HRP.Position
@@ -192,46 +220,43 @@ local function SetupCharacter(char)
     HeartbeatConnection = RunService.Heartbeat:Connect(function(dt)
         if IsRestrictedPlace() then return end
         if not Character or Humanoid.Health <= 0 then return end
-        if not AutoFarm then return end
 
-        -- ⏱ Carry Mode
+        -- CarryMode (attente 1:30)
         if CarryMode then
-            CarryStartTime = CarryStartTime or tick()
+            if not CarryStartTime then
+                CarryStartTime = tick()
+            end
             if tick() - CarryStartTime < CARRY_DELAY then
-                return
+                return -- attendre avant TP/auto-farm
             end
         else
             CarryStartTime = nil
         end
 
-        -- 🎯 TARGET
+        if not AutoFarm then return end
+
+        -- TARGET
         local target = GetRoseRoot()
         if not target then
             local enemies = workspace:FindFirstChild("Enemies")
-            if enemies then
-                target = GetBestTarget(enemies)
-            end
+            if enemies then target = GetBestTarget(enemies) end
         end
         if not target then return end
         CurrentTarget = target
 
-        -- 🚫 NO COLLIDE
+        -- COLLISIONS
         for _, p in ipairs(Character:GetDescendants()) do
-            if p:IsA("BasePart") then
-                p.CanCollide = false
-            end
+            if p:IsA("BasePart") then p.CanCollide = false end
         end
 
-        -- 🚀 TP AU-DESSUS DU MOB
-        local pos = target.Position + Vector3.new(0, HeightAboveMob, 0)
+        -- MOVE / TP
+        local offset = (target == GetRoseRoot()) and 1 or HeightAboveMob
+        local pos = target.Position + Vector3.new(0, offset, 0)
         local dir = pos - HRP.Position
-        HRP.Velocity = dir.Magnitude > 1 and dir.Unit * TpSpeed or Vector3.zero
-        HRP.CFrame = CFrame.lookAt(
-            HRP.Position,
-            Vector3.new(target.Position.X, HRP.Position.Y, target.Position.Z)
-        )
+        HRP.Velocity = dir.Magnitude > 2 and dir.Unit * TpSpeed or Vector3.zero
+        HRP.CFrame = CFrame.lookAt(HRP.Position, Vector3.new(target.Position.X, HRP.Position.Y, target.Position.Z))
 
-        -- ⚔️ ATTACK
+        -- ATTACK
         task.delay(AttackDelay, function()
             if AutoFarm and CurrentTarget == target
             and (target.Position - HRP.Position).Magnitude <= SwingDistance then
@@ -240,26 +265,35 @@ local function SetupCharacter(char)
             end
         end)
 
-        -- 🔮 SPELLS
-        local usingSpell = false
+        -- SPELLS
         if AutoSpell then
             for _, k in ipairs({"Q","E","R"}) do
                 local s = LocalPlayer:FindFirstChild("spell"..k)
                 local c = LocalPlayer:FindFirstChild("cooldown"..k)
                 if s and s.Value and c and c.Value <= 0 then
-                    usingSpell = true
                     ReplicatedStorage.useSpell:FireServer(k)
                     task.wait(SpellDelay)
                 end
             end
         end
 
-        -- 🧱 STUCK (immobile + pas d’attaque + pas de spell)
-        local distMoved = (HRP.Position - StuckRefPosition).Magnitude
-        local timeSinceSwing = tick() - LastSwingTime
+        -- STUCK DETECTION (immobile ET pas d’attaque ET pas de spell)
+        local distanceMoved = (HRP.Position - StuckRefPosition).Magnitude
+        local timeSinceSwing = tick() - (LastSwingTime or 0)
 
-        if distMoved < MOVE_THRESHOLD and timeSinceSwing > 1 and not usingSpell then
-            StuckTimer += dt
+        -- Vérifie si un sort est prêt et peut être utilisé
+        local usingSpell = false
+        for _, k in ipairs({"Q","E","R"}) do
+            local s = LocalPlayer:FindFirstChild("spell"..k)
+            local c = LocalPlayer:FindFirstChild("cooldown"..k)
+            if s and s.Value and c and c.Value <= 0 then
+                usingSpell = true
+                break
+            end
+        end
+
+        if distanceMoved < MOVE_THRESHOLD and timeSinceSwing > 1 and not usingSpell then
+            StuckTimer = StuckTimer + dt
             if StuckTimer >= STUCK_TIME then
                 if ReplicatedStorage:FindFirstChild("DungeonFail") then
                     ReplicatedStorage.DungeonFail:FireServer()
@@ -273,17 +307,14 @@ local function SetupCharacter(char)
     end)
 end
 
--- =========================================================
--- INIT
+-- INITIAL SETUP
 if LocalPlayer.Character then
     SetupCharacter(LocalPlayer.Character)
 end
-
 LocalPlayer.CharacterAdded:Connect(function(char)
     task.wait(1)
     SetupCharacter(char)
 end)
-
 
 -- AUTO START DUNGEON
 task.spawn(function()
