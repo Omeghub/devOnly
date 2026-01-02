@@ -126,6 +126,7 @@ local StopPlayers = {
     ["oSpiriti"] = true,
     ["SirPixel"] = true,
     ["lilSpiriti"] = true,
+    ["TradeHub96"] = true,
     ["SirPixelP"] = true
 }
 
