@@ -69,7 +69,7 @@ local Tabs = {
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
 -- =========================================================
--- AUTO FARM TP + AUTO START + CARRY (FULL SAFE VERSION)
+-- AUTO FARM TP + AUTO START + CARRY (FULL VERSION)
 repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
