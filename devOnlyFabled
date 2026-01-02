@@ -88,7 +88,7 @@ local CarryMode = false
 local AttackDelay = 1
 local SpellDelay = 0.05
 local HeightAboveMob = 25
-local TpSpeed = 200
+local TpSpeed = 100
 local SwingDistance = 35
 
 local CARRY_DELAY = 90 -- 1:30
