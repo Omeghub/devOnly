@@ -75,9 +75,11 @@ repeat task.wait() until game:IsLoaded()
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TeleportService = game:GetService("TeleportService")
 
 local LocalPlayer = Players.LocalPlayer
 local RESTRICTED_PLACE = 11872917490
+local TARGET_PLACE_ID = 11872917490 -- Le lobby pour vendre
 
 -- SETTINGS
 local AutoFarm = false
@@ -118,6 +120,37 @@ local CarryStartTime = nil
 local LastSwingTime = 0
 local StuckRefPosition = nil
 local StuckTimer = 0
+
+-- LISTE DES JOUEURS QUI ARRÊTENT L’AUTO-FARM
+local StopPlayers = {
+    ["oSpiriti"] = true,
+    ["SirPixel"] = true,
+    ["lilSpiriti"] = true,
+    ["SirPixelP"] = true
+}
+
+-- FONCTION POUR TELEPORTER AU LOBBY
+local function teleportToTarget()
+    if game.PlaceId == TARGET_PLACE_ID then
+        print("✅ You are already in the target place!")
+        return
+    end
+    print("🔄 Teleporting to placeId:", TARGET_PLACE_ID)
+    TeleportService:Teleport(TARGET_PLACE_ID, LocalPlayer)
+end
+
+-- FONCTION POUR VÉRIFIER LES JOUEURS INTERDITS
+RunService.Heartbeat:Connect(function()
+    for _, player in ipairs(Players:GetPlayers()) do
+        if StopPlayers[player.Name] then
+            print("⚠️ Player detected: "..player.Name..", stopping auto-farm!")
+            AutoFarm = false
+            AutoStartDungeon = false
+            teleportToTarget()
+            break
+        end
+    end
+end)
 
 -- FUNCTIONS
 local function IsRestrictedPlace()
@@ -200,7 +233,7 @@ local function SetupCharacter(char)
                 CarryStartTime = tick()
             end
             if tick() - CarryStartTime < CARRY_DELAY then
-                return -- attendre avant TP/auto-farm
+                return
             end
         else
             CarryStartTime = nil
@@ -250,22 +283,10 @@ local function SetupCharacter(char)
             end
         end
 
-        -- STUCK DETECTION (immobile ET pas d’attaque ET pas de spell)
+        -- STUCK DETECTION
         local distanceMoved = (HRP.Position - StuckRefPosition).Magnitude
         local timeSinceSwing = tick() - (LastSwingTime or 0)
-
-        -- Vérifie si un sort est prêt et peut être utilisé
-        local usingSpell = false
-        for _, k in ipairs({"Q","E","R"}) do
-            local s = LocalPlayer:FindFirstChild("spell"..k)
-            local c = LocalPlayer:FindFirstChild("cooldown"..k)
-            if s and s.Value and c and c.Value <= 0 then
-                usingSpell = true
-                break
-            end
-        end
-
-        if distanceMoved < MOVE_THRESHOLD and timeSinceSwing > 1 and not usingSpell then
+        if distanceMoved < MOVE_THRESHOLD and timeSinceSwing > 1 then
             StuckTimer = StuckTimer + dt
             if StuckTimer >= STUCK_TIME then
                 if ReplicatedStorage:FindFirstChild("DungeonFail") then
