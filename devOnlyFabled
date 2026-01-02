@@ -250,10 +250,22 @@ local function SetupCharacter(char)
             end
         end
 
-        -- STUCK DETECTION (immobile ET pas d’attaque)
+        -- STUCK DETECTION (immobile ET pas d’attaque ET pas de spell)
         local distanceMoved = (HRP.Position - StuckRefPosition).Magnitude
         local timeSinceSwing = tick() - (LastSwingTime or 0)
-        if distanceMoved < MOVE_THRESHOLD and timeSinceSwing > 1 then
+
+        -- Vérifie si un sort est prêt et peut être utilisé
+        local usingSpell = false
+        for _, k in ipairs({"Q","E","R"}) do
+            local s = LocalPlayer:FindFirstChild("spell"..k)
+            local c = LocalPlayer:FindFirstChild("cooldown"..k)
+            if s and s.Value and c and c.Value <= 0 then
+                usingSpell = true
+                break
+            end
+        end
+
+        if distanceMoved < MOVE_THRESHOLD and timeSinceSwing > 1 and not usingSpell then
             StuckTimer = StuckTimer + dt
             if StuckTimer >= STUCK_TIME then
                 if ReplicatedStorage:FindFirstChild("DungeonFail") then
