@@ -114,9 +114,9 @@ local Character, HRP, Humanoid
 local HeartbeatConnection
 local CurrentTarget
 local LastPosition
-local StuckStart
 local DungeonStarted = false
 local CarryStartTime = nil
+local LastSwingTime = 0
 
 -- FUNCTIONS
 local function IsRestrictedPlace()
@@ -179,15 +179,16 @@ local function SetupCharacter(char)
     HRP = char:WaitForChild("HumanoidRootPart")
     Humanoid = char:WaitForChild("Humanoid")
     LastPosition = HRP.Position
-    StuckStart = nil
     DungeonStarted = false
     CarryStartTime = nil
+    LastSwingTime = 0
 
     if HeartbeatConnection then
         HeartbeatConnection:Disconnect()
     end
 
     local stuckTime = 0
+
     HeartbeatConnection = RunService.Heartbeat:Connect(function(dt)
         if IsRestrictedPlace() then return end
         if not Character or Humanoid.Health <= 0 then return end
@@ -232,6 +233,7 @@ local function SetupCharacter(char)
             if AutoFarm and CurrentTarget == target
             and (target.Position - HRP.Position).Magnitude <= SwingDistance then
                 ReplicatedStorage.Swing:FireServer()
+                LastSwingTime = tick()
             end
         end)
 
@@ -247,9 +249,10 @@ local function SetupCharacter(char)
             end
         end
 
-        -- STUCK DETECTION
+        -- STUCK DETECTION (ignore si tu attaques)
         local distanceMoved = (HRP.Position - LastPosition).Magnitude
-        if distanceMoved < MOVE_THRESHOLD then
+        local timeSinceSwing = tick() - (LastSwingTime or 0)
+        if distanceMoved < MOVE_THRESHOLD and timeSinceSwing > 1 then
             stuckTime = stuckTime + dt
             if stuckTime >= STUCK_TIME then
                 if ReplicatedStorage:FindFirstChild("DungeonFail") then
