@@ -92,7 +92,7 @@ local SwingDistance = 35
 
 local CARRY_DELAY = 90
 local STUCK_TIME = 5
-local MOVE_THRESHOLD = 1
+local MOVE_THRESHOLD = 0.3
 
 local AllowedDungeons = {
     ["Ethereal Farlands"] = true,
@@ -241,28 +241,32 @@ local function SetupCharacter(char)
         end
 
         -- ======================
-        -- STUCK = RESET CHARACTER
-        local distanceMoved = (HRP.Position - StuckRefPosition).Magnitude
-        local timeSinceSwing = tick() - LastSwingTime
+-- REAL STUCK (HARD RESET)
 
-        if distanceMoved < MOVE_THRESHOLD and timeSinceSwing > 1 and not usingSpell then
-            StuckTimer += dt
+local moved = (HRP.Position - StuckRefPosition).Magnitude
 
-            if StuckTimer >= STUCK_TIME then
-                _G.sendAlertWebhook(
-                    "Stuck detected",
-                    "Reset character after " .. STUCK_TIME .. " seconds"
-                )
-
-                Humanoid.Health = 0 -- RESET
-                StuckTimer = 0
-            end
-        else
-            StuckTimer = 0
-            StuckRefPosition = HRP.Position
-        end
-    end)
+-- On ignore totalement les attaques et spells
+if moved < MOVE_THRESHOLD then
+    StuckTimer += dt
+else
+    StuckTimer = 0
+    StuckRefPosition = HRP.Position
 end
+
+if StuckTimer >= STUCK_TIME then
+    _G.sendAlertWebhook(
+        "Stuck detected",
+        "Hard reset after "..STUCK_TIME.."s"
+    )
+
+    -- RESET IMPOSSIBLE À BLOQUER
+    if Character then
+        Character:BreakJoints()
+    end
+
+    StuckTimer = 0
+end
+
 
 -- INIT
 if LocalPlayer.Character then
