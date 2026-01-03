@@ -420,14 +420,13 @@ end)
 
 -- =========================================================
 -- AUTO RETRY (SAFE WITH AUTO SELL)
-local AutoRetry = false
-local AutoRetryTask = nil
-
-_G.ForceReturnToLobby = _G.ForceReturnToLobby or false
-
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
+
+local AutoRetry = false
+local AutoRetryTask = nil
+local Returning = false
 
 local function StartAutoRetry()
     if AutoRetryTask then return end
@@ -447,10 +446,10 @@ local function StartAutoRetry()
             if not completionScreen then continue end
 
             local failedFrame = completionScreen:FindFirstChild("failedFrame")
-            if not failedFrame then continue end
+            if not failedFrame or not failedFrame.Visible then continue end
 
             local retryBtn = failedFrame:FindFirstChild("Retry")
-            if retryBtn and retryBtn.Visible and not _G.ForceReturnToLobby then
+            if retryBtn and retryBtn.Visible then
                 local voteRemote = ReplicatedStorage:FindFirstChild("voteRemote")
                 if voteRemote then
                     voteRemote:FireServer("repeat")
@@ -479,6 +478,27 @@ Tabs.Main:AddToggle("AutoRetry", {
         end
     end
 })
+
+local function ReturnToLobby()
+    if Returning then return end
+    Returning = true
+
+    _G.ForceReturnToLobby = true
+
+    if ReplicatedStorage:FindFirstChild("DungeonFail") then
+        ReplicatedStorage.DungeonFail:FireServer()
+    end
+
+    task.wait(0.8)
+
+    local voteRemote = ReplicatedStorage:FindFirstChild("voteRemote")
+    if voteRemote then
+        voteRemote:FireServer("return")
+    end
+end
+
+_G.ReturnToLobby = ReturnToLobby
+
 
 -- =========================================================
 -- AUTO SMART SWITCH DUNGEON
