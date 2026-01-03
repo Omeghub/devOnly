@@ -419,106 +419,81 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- =========================================================
--- AUTO RETRY (SAFE SELL)
+-- AUTO RETRY (FAIL + COMPLETION)
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 
 local AutoRetry = false
-local AutoRetryTask = nil
-local Returning = false
+local Connections = {}
 
--- Fonction pour gérer le retry
-local function TryRetry()
+local function fireRetry(reason)
+    if not AutoRetry then return end
     if _G.ForceReturnToLobby then return end
 
-    local gui = LocalPlayer:FindFirstChild("PlayerGui")
-    if not gui then return end
+    local voteRemote = ReplicatedStorage:FindFirstChild("voteRemote")
+    if voteRemote then
+        warn("🔁 Auto Retry triggered:", reason)
+        voteRemote:FireServer("repeat")
 
-    local completionScreen = gui:FindFirstChild("CompletionScreen")
-    if not completionScreen then return end
-
-    local border = completionScreen:FindFirstChild("CompletionBorder")
-    if not border then return end
-
-    -- Quand CompletionBorder devient visible
-    if border.Visible then
-        local failedFrame = completionScreen:FindFirstChild("failedFrame")
-        if failedFrame and failedFrame.Visible then
-            local retryBtn = failedFrame:FindFirstChild("Retry")
-            if retryBtn and retryBtn.Visible then
-                local voteRemote = ReplicatedStorage:FindFirstChild("voteRemote")
-                if voteRemote then
-                    voteRemote:FireServer("repeat")
-                    -- webhook optionnel pour trace
-                    if _G.sendAlertWebhook then
-                        _G.sendAlertWebhook("Auto Retry", "Retry button pressed")
-                    end
-                end
-            end
+        if _G.sendAlertWebhook then
+            _G.sendAlertWebhook(
+                "Auto Retry",
+                reason
+            )
         end
     end
 end
 
--- démarre l'AutoRetry avec listener
-local function StartAutoRetry()
-    if AutoRetryTask then return end
-    AutoRetryTask = true
+local function SetupAutoRetry()
+    -- éviter double setup
+    if #Connections > 0 then return end
 
     local gui = LocalPlayer:WaitForChild("PlayerGui")
     local completionScreen = gui:WaitForChild("CompletionScreen")
-    local border = completionScreen:WaitForChild("CompletionBorder")
 
-    -- listener sur la propriété Visible
-    border:GetPropertyChangedSignal("Visible"):Connect(function()
-        if AutoRetry then
-            TryRetry()
-        end
-    end)
+    local failedFrame = completionScreen:WaitForChild("failedFrame")
+    local completionBorder = completionScreen:WaitForChild("CompletionBorder")
+
+    -- ❌ DUNGEON FAILED
+    table.insert(Connections,
+        failedFrame:GetPropertyChangedSignal("Visible"):Connect(function()
+            if failedFrame.Visible then
+                fireRetry("Dungeon failed")
+            end
+        end)
+    )
+
+    -- ✅ DUNGEON COMPLETED
+    table.insert(Connections,
+        completionBorder:GetPropertyChangedSignal("Visible"):Connect(function()
+            if completionBorder.Visible then
+                fireRetry("Dungeon completed")
+            end
+        end)
+    )
 end
 
--- arrête l'AutoRetry
 local function StopAutoRetry()
     AutoRetry = false
-    AutoRetryTask = nil
+    for _, c in ipairs(Connections) do
+        pcall(function() c:Disconnect() end)
+    end
+    Connections = {}
 end
 
--- toggle GUI
 Tabs.Main:AddToggle("AutoRetry", {
-    Title = "Auto Retry",
+    Title = "Auto Retry (Fail + Win)",
     Default = false,
     Callback = function(v)
         AutoRetry = v
         if v then
-            StartAutoRetry()
+            SetupAutoRetry()
         else
             StopAutoRetry()
         end
     end
 })
-
-local Returning = false
-local function ReturnToLobby()
-    if Returning then return end
-    Returning = true
-
-    _G.ForceReturnToLobby = true
-
-    if ReplicatedStorage:FindFirstChild("DungeonFail") then
-        ReplicatedStorage.DungeonFail:FireServer()
-    end
-
-    task.wait(0.8)
-
-    local voteRemote = ReplicatedStorage:FindFirstChild("voteRemote")
-    if voteRemote then
-        voteRemote:FireServer("return")
-    end
-
-    Returning = false
-end
-
-_G.ReturnToLobby = ReturnToLobby
 
 
 -- =========================================================
