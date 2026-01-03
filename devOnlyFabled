@@ -883,28 +883,30 @@ if allowedPlace then
     listenCompletion()
 end
 -- =========================================================
--- AUTO INFINITE TOWER
+-- AUTO INFINITE TOWER (SAFE VERSION)
 repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 
 local LocalPlayer = Players.LocalPlayer
 local Character, HRP
-local AutoInfiniteTower = false
 
+local AutoInfiniteTower = false
 local UsePortal1 = true
 local UsePortal2 = true
 local UsePortal3 = false
 
 local PromptDelay = 0.3
-local PortalDelay = 0.25
+local PortalDelay = 0.5
 local TreasureOffset = Vector3.new(0, 3, 0)
 
+-- =========================================================
+-- CHARACTER
 local function SetupCharacter(char)
     Character = char
-    HRP = char:WaitForChild("HumanoidRootPart")
+    HRP = char:WaitForChild("HumanoidRootPart", 5)
 end
 
 if LocalPlayer.Character then
@@ -916,6 +918,8 @@ LocalPlayer.CharacterAdded:Connect(function(char)
     SetupCharacter(char)
 end)
 
+-- =========================================================
+-- UI TOGGLES
 Tabs.Tower:AddToggle("AutoInfiniteTower", {
     Title = "Auto Infinite Tower",
     Default = false,
@@ -927,92 +931,88 @@ Tabs.Tower:AddToggle("AutoInfiniteTower", {
 Tabs.Tower:AddToggle("Portal1", {
     Title = "Use Portal 1",
     Default = true,
-    Callback = function(v)
-        UsePortal1 = v
-    end
+    Callback = function(v) UsePortal1 = v end
 })
 
 Tabs.Tower:AddToggle("Portal2", {
     Title = "Use Portal 2",
     Default = true,
-    Callback = function(v)
-        UsePortal2 = v
-    end
+    Callback = function(v) UsePortal2 = v end
 })
 
 Tabs.Tower:AddToggle("Portal3", {
     Title = "Use Portal 3",
     Default = false,
-    Callback = function(v)
-        UsePortal3 = v
-    end
+    Callback = function(v) UsePortal3 = v end
 })
 
+-- =========================================================
+-- PORTALS
+local lastPortalUse = 0
+
 local function HandlePortals()
+    if tick() - lastPortalUse < 1.5 then return end
+
     local gui = LocalPlayer:FindFirstChild("PlayerGui")
-    if not gui then return end
+    local portalsGui = gui and gui:FindFirstChild("Portals")
+    local mainGroup = portalsGui and portalsGui:FindFirstChild("MainGroup")
 
-    local portalsGui = gui:FindFirstChild("Portals")
-    if not portalsGui then return end
-
-    local mainGroup = portalsGui:FindFirstChild("MainGroup")
-    if not mainGroup or not mainGroup.Visible then return end
+    if not (mainGroup and mainGroup.Visible) then return end
 
     if UsePortal1 then
-        ReplicatedStorage:WaitForChild("DisplayPortals"):FireServer(1)
+        ReplicatedStorage.DisplayPortals:FireServer(1)
         task.wait(PortalDelay)
     end
-
     if UsePortal2 then
-        ReplicatedStorage:WaitForChild("DisplayPortals"):FireServer(2)
+        ReplicatedStorage.DisplayPortals:FireServer(2)
+        task.wait(PortalDelay)
+    end
+    if UsePortal3 then
+        ReplicatedStorage.DisplayPortals:FireServer(3)
         task.wait(PortalDelay)
     end
 
-    if UsePortal3 then
-        ReplicatedStorage:WaitForChild("DisplayPortals"):FireServer(3)
-        task.wait(PortalDelay)
-    end
+    lastPortalUse = tick()
 end
 
-local function TpToTreasure()
+-- =========================================================
+-- SAFE TP (NO DAMAGE BUG)
+local function TweenTo(cf)
     if not HRP then return end
 
-    local treasure = workspace:FindFirstChild("Treasure")
-    if not treasure then return end
-
-    local ringPart = treasure:FindFirstChild("ringRewardsPart")
-    if not ringPart then return end
-
-    HRP.CFrame = ringPart.CFrame + TreasureOffset
+    TweenService:Create(
+        HRP,
+        TweenInfo.new(0.25, Enum.EasingStyle.Linear),
+        { CFrame = cf }
+    ):Play()
 end
 
 local function FarmTowerRewards()
-    local treasure = workspace:FindFirstChild("Treasure")
-    if not treasure then return end
+    if not HRP then return end
 
-    local ringPart = treasure:FindFirstChild("ringRewardsPart")
+    local treasure = workspace:FindFirstChild("Treasure")
+    local ringPart = treasure and treasure:FindFirstChild("ringRewardsPart")
     if not ringPart then return end
 
     local promptFolder = ringPart:FindFirstChild("prompt")
-    if not promptFolder then return end
+    local prompt = promptFolder and promptFolder:FindFirstChildOfClass("ProximityPrompt")
+    if not (prompt and prompt.Enabled) then return end
 
-    local prompt = promptFolder:FindFirstChildOfClass("ProximityPrompt")
-    if not prompt or not prompt.Enabled then return end
-
-    TpToTreasure()
+    TweenTo(ringPart.CFrame + TreasureOffset)
     task.wait(PromptDelay)
 
     fireproximityprompt(prompt)
 end
 
 task.spawn(function()
-    while task.wait(0.3) do
+    while task.wait(0.4) do
         if not AutoInfiniteTower then continue end
 
         HandlePortals()
         FarmTowerRewards()
     end
 end)
+
 -- =========================================================
 -- AUTO STATS
 local AutoPhysical = false
