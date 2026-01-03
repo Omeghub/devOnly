@@ -69,10 +69,9 @@ local Tabs = {
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
 -- =========================================================
--- AUTO FARM TP + AUTO START + CARRY + REAL ANTI-STUCK (FIXED)
+-- AUTO FARM TP + AUTO START + CARRY (FULL SAFE VERSION)
 repeat task.wait() until game:IsLoaded()
 
--- SERVICES
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -80,24 +79,21 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 local RESTRICTED_PLACE = 11872917490
 
--- TOGGLES
 local AutoFarm = false
 local AutoSpell = false
 local AutoStartDungeon = false
 local CarryMode = false
 
--- CONFIG
 local AttackDelay = 1
 local SpellDelay = 0.05
 local HeightAboveMob = 25
 local TpSpeed = 100
 local SwingDistance = 35
 
-local CARRY_DELAY = 90
-local STUCK_TIME = 10
-local MOVE_THRESHOLD = 3 -- IMPORTANT
+local CARRY_DELAY = 90 -- 1:30
+local STUCK_TIME = 5
+local MOVE_THRESHOLD = 1
 
--- DUNGEONS
 local AllowedDungeons = {
     ["Ethereal Farlands"] = true,
     ["Stardust Citadel"] = true,
@@ -112,27 +108,23 @@ local DungeonStartDelay = {
     ["Neon District"] = 10
 }
 
--- STATE
 local Character, HRP, Humanoid
 local HeartbeatConnection
+local CurrentTarget
 local DungeonStarted = false
 local CarryStartTime = nil
 local LastSwingTime = 0
-
--- STUCK STATE
+local StuckRefPosition = nil
 local StuckTimer = 0
-local StuckStartPosition = nil
-local ResetUsed = false
 
--- =========================================================
 local function IsRestrictedPlace()
     return game.PlaceId == RESTRICTED_PLACE
 end
 
 local function GetSessionName()
-    local ds = workspace:FindFirstChild("DungeonSettings")
-    local s = ds and ds:FindFirstChild("SessionName")
-    return s and s.Value
+    local settings = workspace:FindFirstChild("DungeonSettings")
+    local session = settings and settings:FindFirstChild("SessionName")
+    return session and session.Value
 end
 
 local function GetModelRoot(model)
@@ -142,126 +134,179 @@ local function GetModelRoot(model)
     end
 end
 
+local function GetDungeonTimeLeft()
+    local gui = LocalPlayer:FindFirstChild("PlayerGui")
+    local timer = gui and gui:FindFirstChild("DungeonTimer")
+    local frame = timer and timer:FindFirstChild("Frame")
+    local label = frame and frame:FindFirstChild("TextLabel")
+    if not label then return nil end
+
+    local m, s = label.Text:match("(%d+):(%d+)")
+    if not m then return nil end
+    return tonumber(m) * 60 + tonumber(s)
+end
+
 local function GetBestTarget(enemies)
-    local best, dist = nil, math.huge
+    local electroHum, electroRoot
+    local statues = {}
+    local closest, shortest = nil, math.huge
+
     for _, mob in ipairs(enemies:GetChildren()) do
-        local hum = mob:FindFirstChildOfClass("Humanoid")
-        local root = GetModelRoot(mob)
-        if hum and root and hum.Health > 0 then
-            local d = (root.Position - HRP.Position).Magnitude
-            if d < dist then
-                dist = d
-                best = root
+        if mob:IsA("Model") then
+            local hum = mob:FindFirstChildOfClass("Humanoid")
+            local root = GetModelRoot(mob)
+
+            if hum and root and hum.Health > 0 then
+                if mob.Name == "Electro Elemental" then
+                    electroHum = hum
+                    electroRoot = root
+                end
+
+                if mob.Name:find("Powered Statue") then
+                    table.insert(statues, root)
+                end
+
+                local dist = (root.Position - HRP.Position).Magnitude
+                if dist < shortest then
+                    shortest = dist
+                    closest = root
+                end
             end
         end
     end
-    return best
+
+    if electroHum and electroHum.Health == 10000000 and #statues > 0 then
+        return statues[1]
+    end
+
+    if electroHum and electroHum.Health < 10000000 then
+        return electroRoot
+    end
+
+    if #statues > 0 then
+        return statues[1]
+    end
+
+    return closest
 end
 
 local function GetRoseRoot()
     local rose = workspace:FindFirstChild("Rose")
-    local hit = rose and rose:FindFirstChild("Hitbox")
-    return hit and (hit:IsA("Model") and GetModelRoot(hit) or hit)
+    local hitbox = rose and rose:FindFirstChild("Hitbox")
+    if not hitbox then return nil end
+    return hitbox:IsA("Model") and GetModelRoot(hitbox) or hitbox
 end
 
--- =========================================================
 local function SetupCharacter(char)
     Character = char
     HRP = char:WaitForChild("HumanoidRootPart")
     Humanoid = char:WaitForChild("Humanoid")
 
+    DungeonStarted = false
+    CarryStartTime = nil
+    LastSwingTime = 0
+    StuckRefPosition = HRP.Position
     StuckTimer = 0
-    StuckStartPosition = nil
-    ResetUsed = false
-    LastSwingTime = tick()
 
     if HeartbeatConnection then
         HeartbeatConnection:Disconnect()
     end
 
     HeartbeatConnection = RunService.Heartbeat:Connect(function(dt)
-        if IsRestrictedPlace() or not AutoFarm or Humanoid.Health <= 0 then return end
+        if IsRestrictedPlace() then return end
+        if not Character or Humanoid.Health <= 0 then return end
 
-        -- CARRY
         if CarryMode then
-            CarryStartTime = CarryStartTime or tick()
-            if tick() - CarryStartTime < CARRY_DELAY then return end
+            if not CarryStartTime then
+                CarryStartTime = tick()
+            end
+            if tick() - CarryStartTime < CARRY_DELAY then
+                return
+            end
         else
             CarryStartTime = nil
         end
 
-        -- TARGET
+        if not AutoFarm then return end
+
         local target = GetRoseRoot()
         if not target then
             local enemies = workspace:FindFirstChild("Enemies")
             if enemies then target = GetBestTarget(enemies) end
         end
         if not target then return end
+        CurrentTarget = target
 
-        -- MOVE
+        for _, p in ipairs(Character:GetDescendants()) do
+            if p:IsA("BasePart") then p.CanCollide = false end
+        end
+
         local offset = (target == GetRoseRoot()) and 1 or HeightAboveMob
-        local goal = target.Position + Vector3.new(0, offset, 0)
-        local dir = goal - HRP.Position
+        local pos = target.Position + Vector3.new(0, offset, 0)
+        local dir = pos - HRP.Position
+        HRP.Velocity = dir.Magnitude > 2 and dir.Unit * TpSpeed or Vector3.zero
+        HRP.CFrame = CFrame.lookAt(HRP.Position, Vector3.new(target.Position.X, HRP.Position.Y, target.Position.Z))
 
-        HRP.CFrame = HRP.CFrame:Lerp(
-            CFrame.lookAt(goal, Vector3.new(target.Position.X, HRP.Position.Y, target.Position.Z)),
-            0.15
-        )
-
-        -- ATTACK
-        if (target.Position - HRP.Position).Magnitude <= SwingDistance then
-            if tick() - LastSwingTime >= AttackDelay then
+        task.delay(AttackDelay, function()
+            if AutoFarm and CurrentTarget == target
+            and (target.Position - HRP.Position).Magnitude <= SwingDistance then
                 ReplicatedStorage.Swing:FireServer()
                 LastSwingTime = tick()
             end
-        end
+        end)
 
-        -- ======================
-        -- REAL ANTI STUCK
-        if not StuckStartPosition then
-            StuckStartPosition = HRP.Position
-            StuckTimer = 0
-            return
-        end
-
-        local moved = (HRP.Position - StuckStartPosition).Magnitude
-        local noAttack = tick() - LastSwingTime > 1.5
-
-        if moved < MOVE_THRESHOLD and noAttack then
-            StuckTimer += dt
-
-            if StuckTimer >= STUCK_TIME then
-                if not ResetUsed then
-                    ResetUsed = true
-                    StuckStartPosition = nil
-                    Humanoid.Health = 0
-                    return
+        if AutoSpell then
+            for _, k in ipairs({"Q","E","R"}) do
+                local s = LocalPlayer:FindFirstChild("spell"..k)
+                local c = LocalPlayer:FindFirstChild("cooldown"..k)
+                if s and s.Value and c and c.Value <= 0 then
+                    ReplicatedStorage.useSpell:FireServer(k)
+                    task.wait(SpellDelay)
                 end
+            end
+        end
 
-                if ReplicatedStorage:FindFirstChild("DungeonFail") then
-                    ReplicatedStorage.DungeonFail:FireServer()
+        local distanceMoved = (HRP.Position - StuckRefPosition).Magnitude
+        local timeSinceSwing = tick() - (LastSwingTime or 0)
+
+        local usingSpell = false
+        for _, k in ipairs({"Q","E","R"}) do
+            local s = LocalPlayer:FindFirstChild("spell"..k)
+            local c = LocalPlayer:FindFirstChild("cooldown"..k)
+            if s and s.Value and c and c.Value <= 0 then
+                usingSpell = true
+                break
+            end
+        end
+
+        if distanceMoved < MOVE_THRESHOLD and timeSinceSwing > 1 and not usingSpell then
+            StuckTimer = StuckTimer + dt
+            if StuckTimer >= STUCK_TIME then
+                _G.sendAlertWebhook(
+                    "Stuck detected",
+                    "No movement & no attacks for " .. STUCK_TIME .. " seconds"
+                )
+
+                 if ReplicatedStorage:FindFirstChild("DungeonFail") then
+                     ReplicatedStorage.DungeonFail:FireServer()
                 end
 
                 StuckTimer = 0
-                StuckStartPosition = nil
             end
         else
-            StuckStartPosition = HRP.Position
             StuckTimer = 0
+            StuckRefPosition = HRP.Position
         end
     end)
 end
 
--- INIT
 if LocalPlayer.Character then
     SetupCharacter(LocalPlayer.Character)
 end
-
-LocalPlayer.CharacterAdded:Connect(function(c)
+LocalPlayer.CharacterAdded:Connect(function(char)
     task.wait(1)
-    SetupCharacter(c)
+    SetupCharacter(char)
 end)
-
 -- =========================================================
 -- AUTO START DUNGEON
 task.spawn(function()
@@ -271,18 +316,18 @@ task.spawn(function()
             continue
         end
 
-        local dungeon = GetSessionName()
-        if not AllowedDungeons[dungeon] then continue end
-
         local gui = LocalPlayer.PlayerGui
         local main = gui and gui:FindFirstChild("mainGui")
         local btn = main and main:FindFirstChild("startDungeon")
 
         if btn and btn.Visible and not DungeonStarted then
-            task.wait(DungeonStartDelay[dungeon] or 0)
+            local delay = DungeonStartDelay[GetSessionName()] or 0
+            task.wait(delay)
+
             ReplicatedStorage.EquipBest:FireServer()
-            task.wait(2)
+            task.wait(3)
             ReplicatedStorage.StartDungeon:FireServer(true)
+
             DungeonStarted = true
         end
     end
@@ -842,30 +887,28 @@ if allowedPlace then
     listenCompletion()
 end
 -- =========================================================
--- AUTO INFINITE TOWER (SAFE VERSION)
+-- AUTO INFINITE TOWER
 repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
 
 local LocalPlayer = Players.LocalPlayer
 local Character, HRP
-
 local AutoInfiniteTower = false
+
 local UsePortal1 = true
 local UsePortal2 = true
 local UsePortal3 = false
 
 local PromptDelay = 0.3
-local PortalDelay = 0.5
+local PortalDelay = 0.25
 local TreasureOffset = Vector3.new(0, 3, 0)
 
--- =========================================================
--- CHARACTER
 local function SetupCharacter(char)
     Character = char
-    HRP = char:WaitForChild("HumanoidRootPart", 5)
+    HRP = char:WaitForChild("HumanoidRootPart")
 end
 
 if LocalPlayer.Character then
@@ -877,8 +920,6 @@ LocalPlayer.CharacterAdded:Connect(function(char)
     SetupCharacter(char)
 end)
 
--- =========================================================
--- UI TOGGLES
 Tabs.Tower:AddToggle("AutoInfiniteTower", {
     Title = "Auto Infinite Tower",
     Default = false,
@@ -890,88 +931,92 @@ Tabs.Tower:AddToggle("AutoInfiniteTower", {
 Tabs.Tower:AddToggle("Portal1", {
     Title = "Use Portal 1",
     Default = true,
-    Callback = function(v) UsePortal1 = v end
+    Callback = function(v)
+        UsePortal1 = v
+    end
 })
 
 Tabs.Tower:AddToggle("Portal2", {
     Title = "Use Portal 2",
     Default = true,
-    Callback = function(v) UsePortal2 = v end
+    Callback = function(v)
+        UsePortal2 = v
+    end
 })
 
 Tabs.Tower:AddToggle("Portal3", {
     Title = "Use Portal 3",
     Default = false,
-    Callback = function(v) UsePortal3 = v end
+    Callback = function(v)
+        UsePortal3 = v
+    end
 })
 
--- =========================================================
--- PORTALS
-local lastPortalUse = 0
-
 local function HandlePortals()
-    if tick() - lastPortalUse < 1.5 then return end
-
     local gui = LocalPlayer:FindFirstChild("PlayerGui")
-    local portalsGui = gui and gui:FindFirstChild("Portals")
-    local mainGroup = portalsGui and portalsGui:FindFirstChild("MainGroup")
+    if not gui then return end
 
-    if not (mainGroup and mainGroup.Visible) then return end
+    local portalsGui = gui:FindFirstChild("Portals")
+    if not portalsGui then return end
+
+    local mainGroup = portalsGui:FindFirstChild("MainGroup")
+    if not mainGroup or not mainGroup.Visible then return end
 
     if UsePortal1 then
-        ReplicatedStorage.DisplayPortals:FireServer(1)
+        ReplicatedStorage:WaitForChild("DisplayPortals"):FireServer(1)
         task.wait(PortalDelay)
     end
+
     if UsePortal2 then
-        ReplicatedStorage.DisplayPortals:FireServer(2)
+        ReplicatedStorage:WaitForChild("DisplayPortals"):FireServer(2)
         task.wait(PortalDelay)
     end
+
     if UsePortal3 then
-        ReplicatedStorage.DisplayPortals:FireServer(3)
+        ReplicatedStorage:WaitForChild("DisplayPortals"):FireServer(3)
         task.wait(PortalDelay)
     end
-
-    lastPortalUse = tick()
 end
 
--- =========================================================
--- SAFE TP (NO DAMAGE BUG)
-local function TweenTo(cf)
-    if not HRP then return end
-
-    TweenService:Create(
-        HRP,
-        TweenInfo.new(0.25, Enum.EasingStyle.Linear),
-        { CFrame = cf }
-    ):Play()
-end
-
-local function FarmTowerRewards()
+local function TpToTreasure()
     if not HRP then return end
 
     local treasure = workspace:FindFirstChild("Treasure")
-    local ringPart = treasure and treasure:FindFirstChild("ringRewardsPart")
+    if not treasure then return end
+
+    local ringPart = treasure:FindFirstChild("ringRewardsPart")
+    if not ringPart then return end
+
+    HRP.CFrame = ringPart.CFrame + TreasureOffset
+end
+
+local function FarmTowerRewards()
+    local treasure = workspace:FindFirstChild("Treasure")
+    if not treasure then return end
+
+    local ringPart = treasure:FindFirstChild("ringRewardsPart")
     if not ringPart then return end
 
     local promptFolder = ringPart:FindFirstChild("prompt")
-    local prompt = promptFolder and promptFolder:FindFirstChildOfClass("ProximityPrompt")
-    if not (prompt and prompt.Enabled) then return end
+    if not promptFolder then return end
 
-    TweenTo(ringPart.CFrame + TreasureOffset)
+    local prompt = promptFolder:FindFirstChildOfClass("ProximityPrompt")
+    if not prompt or not prompt.Enabled then return end
+
+    TpToTreasure()
     task.wait(PromptDelay)
 
     fireproximityprompt(prompt)
 end
 
 task.spawn(function()
-    while task.wait(0.4) do
+    while task.wait(0.3) do
         if not AutoInfiniteTower then continue end
 
         HandlePortals()
         FarmTowerRewards()
     end
 end)
-
 -- =========================================================
 -- AUTO STATS
 local AutoPhysical = false
