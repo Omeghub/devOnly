@@ -91,7 +91,7 @@ local TpSpeed = 100
 local SwingDistance = 35
 
 local CARRY_DELAY = 90 -- 1:30
-local STUCK_TIME = 5
+local STUCK_TIME = 10
 local MOVE_THRESHOLD = 1
 
 local AllowedDungeons = {
