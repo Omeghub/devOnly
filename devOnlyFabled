@@ -419,7 +419,7 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- =========================================================
--- AUTO RETRY (SAFE WITH AUTO SELL)
+-- AUTO RETRY (SAFE SELL)
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
@@ -428,44 +428,62 @@ local AutoRetry = false
 local AutoRetryTask = nil
 local Returning = false
 
-local function StartAutoRetry()
-    if AutoRetryTask then return end
+-- Fonction pour gérer le retry
+local function TryRetry()
+    if _G.ForceReturnToLobby then return end
 
-    AutoRetryTask = task.spawn(function()
-        while AutoRetry do
-            task.wait(0.5)
+    local gui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not gui then return end
 
-            if _G.ForceReturnToLobby then
-                continue
-            end
+    local completionScreen = gui:FindFirstChild("CompletionScreen")
+    if not completionScreen then return end
 
-            local gui = LocalPlayer:FindFirstChild("PlayerGui")
-            if not gui then continue end
+    local border = completionScreen:FindFirstChild("CompletionBorder")
+    if not border then return end
 
-            local completionScreen = gui:FindFirstChild("CompletionScreen")
-            if not completionScreen then continue end
-
-            local failedFrame = completionScreen:FindFirstChild("failedFrame")
-            if not failedFrame or not failedFrame.Visible then continue end
-
+    -- Quand CompletionBorder devient visible
+    if border.Visible then
+        local failedFrame = completionScreen:FindFirstChild("failedFrame")
+        if failedFrame and failedFrame.Visible then
             local retryBtn = failedFrame:FindFirstChild("Retry")
             if retryBtn and retryBtn.Visible then
                 local voteRemote = ReplicatedStorage:FindFirstChild("voteRemote")
                 if voteRemote then
                     voteRemote:FireServer("repeat")
+                    -- webhook optionnel pour trace
+                    if _G.sendAlertWebhook then
+                        _G.sendAlertWebhook("Auto Retry", "Retry button pressed")
+                    end
                 end
             end
         end
+    end
+end
 
-        AutoRetryTask = nil
+-- démarre l'AutoRetry avec listener
+local function StartAutoRetry()
+    if AutoRetryTask then return end
+    AutoRetryTask = true
+
+    local gui = LocalPlayer:WaitForChild("PlayerGui")
+    local completionScreen = gui:WaitForChild("CompletionScreen")
+    local border = completionScreen:WaitForChild("CompletionBorder")
+
+    -- listener sur la propriété Visible
+    border:GetPropertyChangedSignal("Visible"):Connect(function()
+        if AutoRetry then
+            TryRetry()
+        end
     end)
 end
 
+-- arrête l'AutoRetry
 local function StopAutoRetry()
     AutoRetry = false
     AutoRetryTask = nil
 end
 
+-- toggle GUI
 Tabs.Main:AddToggle("AutoRetry", {
     Title = "Auto Retry",
     Default = false,
@@ -479,6 +497,7 @@ Tabs.Main:AddToggle("AutoRetry", {
     end
 })
 
+local Returning = false
 local function ReturnToLobby()
     if Returning then return end
     Returning = true
@@ -495,6 +514,8 @@ local function ReturnToLobby()
     if voteRemote then
         voteRemote:FireServer("return")
     end
+
+    Returning = false
 end
 
 _G.ReturnToLobby = ReturnToLobby
