@@ -69,7 +69,7 @@ local Tabs = {
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
 -- =========================================================
--- AUTO FARM TP + AUTO START + CARRY + REAL ANTI-STUCK
+-- AUTO FARM TP + AUTO START + CARRY + REAL ANTI-STUCK (FIXED)
 repeat task.wait() until game:IsLoaded()
 
 -- SERVICES
@@ -95,7 +95,7 @@ local SwingDistance = 35
 
 local CARRY_DELAY = 90
 local STUCK_TIME = 10
-local MOVE_THRESHOLD = 1
+local MOVE_THRESHOLD = 3 -- IMPORTANT
 
 -- DUNGEONS
 local AllowedDungeons = {
@@ -118,23 +118,21 @@ local HeartbeatConnection
 local DungeonStarted = false
 local CarryStartTime = nil
 local LastSwingTime = 0
-local StuckRefPosition = nil
-local StuckTimer = 0
 
--- ANTI STUCK RESET STATE
-local StuckResetUsed = false
-local PreResetPosition = nil
+-- STUCK STATE
+local StuckTimer = 0
+local StuckStartPosition = nil
+local ResetUsed = false
 
 -- =========================================================
--- UTILS
 local function IsRestrictedPlace()
     return game.PlaceId == RESTRICTED_PLACE
 end
 
 local function GetSessionName()
-    local settings = workspace:FindFirstChild("DungeonSettings")
-    local session = settings and settings:FindFirstChild("SessionName")
-    return session and session.Value
+    local ds = workspace:FindFirstChild("DungeonSettings")
+    local s = ds and ds:FindFirstChild("SessionName")
+    return s and s.Value
 end
 
 local function GetModelRoot(model)
@@ -145,71 +143,49 @@ local function GetModelRoot(model)
 end
 
 local function GetBestTarget(enemies)
-    local closest, shortest = nil, math.huge
+    local best, dist = nil, math.huge
     for _, mob in ipairs(enemies:GetChildren()) do
-        if mob:IsA("Model") then
-            local hum = mob:FindFirstChildOfClass("Humanoid")
-            local root = GetModelRoot(mob)
-            if hum and root and hum.Health > 0 then
-                local d = (root.Position - HRP.Position).Magnitude
-                if d < shortest then
-                    shortest = d
-                    closest = root
-                end
+        local hum = mob:FindFirstChildOfClass("Humanoid")
+        local root = GetModelRoot(mob)
+        if hum and root and hum.Health > 0 then
+            local d = (root.Position - HRP.Position).Magnitude
+            if d < dist then
+                dist = d
+                best = root
             end
         end
     end
-    return closest
+    return best
 end
 
 local function GetRoseRoot()
     local rose = workspace:FindFirstChild("Rose")
-    local hitbox = rose and rose:FindFirstChild("Hitbox")
-    if not hitbox then return nil end
-    return hitbox:IsA("Model") and GetModelRoot(hitbox) or hitbox
+    local hit = rose and rose:FindFirstChild("Hitbox")
+    return hit and (hit:IsA("Model") and GetModelRoot(hit) or hit)
 end
 
 -- =========================================================
--- CHARACTER SETUP
 local function SetupCharacter(char)
     Character = char
     HRP = char:WaitForChild("HumanoidRootPart")
     Humanoid = char:WaitForChild("Humanoid")
 
-    DungeonStarted = false
-    CarryStartTime = nil
-    LastSwingTime = tick()
-    StuckRefPosition = HRP.Position
     StuckTimer = 0
+    StuckStartPosition = nil
+    ResetUsed = false
+    LastSwingTime = tick()
 
     if HeartbeatConnection then
         HeartbeatConnection:Disconnect()
     end
 
-    -- Vérifie si le reset a débloqué
-    if StuckResetUsed and PreResetPosition then
-        task.delay(2, function()
-            if HRP then
-                local moved = (HRP.Position - PreResetPosition).Magnitude
-                if moved > 3 then
-                    StuckResetUsed = false
-                    PreResetPosition = nil
-                end
-            end
-        end)
-    end
-
     HeartbeatConnection = RunService.Heartbeat:Connect(function(dt)
-        if IsRestrictedPlace() then return end
-        if not AutoFarm then return end
-        if Humanoid.Health <= 0 then return end
+        if IsRestrictedPlace() or not AutoFarm or Humanoid.Health <= 0 then return end
 
         -- CARRY
         if CarryMode then
             CarryStartTime = CarryStartTime or tick()
-            if tick() - CarryStartTime < CARRY_DELAY then
-                return
-            end
+            if tick() - CarryStartTime < CARRY_DELAY then return end
         else
             CarryStartTime = nil
         end
@@ -218,26 +194,19 @@ local function SetupCharacter(char)
         local target = GetRoseRoot()
         if not target then
             local enemies = workspace:FindFirstChild("Enemies")
-            if enemies then
-                target = GetBestTarget(enemies)
-            end
+            if enemies then target = GetBestTarget(enemies) end
         end
         if not target then return end
 
-        -- NO COLLIDE
-        for _, p in ipairs(Character:GetDescendants()) do
-            if p:IsA("BasePart") then
-                p.CanCollide = false
-            end
-        end
-
         -- MOVE
         local offset = (target == GetRoseRoot()) and 1 or HeightAboveMob
-        local desired = target.Position + Vector3.new(0, offset, 0)
-        local dir = desired - HRP.Position
+        local goal = target.Position + Vector3.new(0, offset, 0)
+        local dir = goal - HRP.Position
 
-        HRP.Velocity = dir.Magnitude > 2 and dir.Unit * TpSpeed or Vector3.zero
-        HRP.CFrame = CFrame.lookAt(HRP.Position, Vector3.new(target.Position.X, HRP.Position.Y, target.Position.Z))
+        HRP.CFrame = HRP.CFrame:Lerp(
+            CFrame.lookAt(goal, Vector3.new(target.Position.X, HRP.Position.Y, target.Position.Z)),
+            0.15
+        )
 
         -- ATTACK
         if (target.Position - HRP.Position).Magnitude <= SwingDistance then
@@ -247,48 +216,38 @@ local function SetupCharacter(char)
             end
         end
 
-        -- SPELLS
-        local usingSpell = false
-        if AutoSpell then
-            for _, k in ipairs({"Q","E","R"}) do
-                local s = LocalPlayer:FindFirstChild("spell"..k)
-                local c = LocalPlayer:FindFirstChild("cooldown"..k)
-                if s and s.Value and c and c.Value <= 0 then
-                    usingSpell = true
-                    ReplicatedStorage.useSpell:FireServer(k)
-                    task.wait(SpellDelay)
-                end
-            end
-        end
-
         -- ======================
         -- REAL ANTI STUCK
-        local moved = (HRP.Position - StuckRefPosition).Magnitude
-        local timeSinceSwing = tick() - LastSwingTime
+        if not StuckStartPosition then
+            StuckStartPosition = HRP.Position
+            StuckTimer = 0
+            return
+        end
 
-        if moved < MOVE_THRESHOLD and timeSinceSwing > 1 and not usingSpell then
+        local moved = (HRP.Position - StuckStartPosition).Magnitude
+        local noAttack = tick() - LastSwingTime > 1.5
+
+        if moved < MOVE_THRESHOLD and noAttack then
             StuckTimer += dt
 
             if StuckTimer >= STUCK_TIME then
-                -- FIRST TIME → RESET
-                if not StuckResetUsed then
-                    StuckResetUsed = true
-                    PreResetPosition = HRP.Position
+                if not ResetUsed then
+                    ResetUsed = true
+                    StuckStartPosition = nil
                     Humanoid.Health = 0
-                    StuckTimer = 0
                     return
                 end
 
-                -- SECOND TIME → FAIL
                 if ReplicatedStorage:FindFirstChild("DungeonFail") then
                     ReplicatedStorage.DungeonFail:FireServer()
                 end
 
                 StuckTimer = 0
+                StuckStartPosition = nil
             end
         else
+            StuckStartPosition = HRP.Position
             StuckTimer = 0
-            StuckRefPosition = HRP.Position
         end
     end)
 end
@@ -298,9 +257,9 @@ if LocalPlayer.Character then
     SetupCharacter(LocalPlayer.Character)
 end
 
-LocalPlayer.CharacterAdded:Connect(function(char)
+LocalPlayer.CharacterAdded:Connect(function(c)
     task.wait(1)
-    SetupCharacter(char)
+    SetupCharacter(c)
 end)
 
 -- =========================================================
