@@ -97,7 +97,6 @@ local CARRY_DELAY = 90
 local MOVE_THRESHOLD = 0.5 -- distance pour considérer que le joueur bouge
 
 local DungeonStartDelay = {
-    ["Ethereal Farlands"] = 10,
     ["Stardust Citadel"] = 10,
     ["Forsaken Limbo"] = 10,
     ["Neon District"] = 10
