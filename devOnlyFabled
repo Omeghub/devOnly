@@ -69,7 +69,8 @@ local Tabs = {
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
 -- =========================================================
--- AUTO FARM TP + AUTO START + CARRY (RESET + SPELL ON ATTACK)
+-- AUTO FARM TP + AUTO START + CARRY
+-- RESET ONLY AFTER DUNGEON START
 repeat task.wait() until game:IsLoaded()
 
 -- SERVICES
@@ -91,6 +92,8 @@ local AttackDelay = 1
 local SpellDelay = 0.05
 local HeightAboveMob = 25
 local TpSpeed = 100
+local NORMAL_TP_SPEED = 100
+local CARRY_TP_SPEED = 50
 local SwingDistance = 35
 
 local CARRY_DELAY = 90
@@ -131,7 +134,7 @@ local function GetModelRoot(model)
     end
 end
 
--- 🔥 TARGET PRIORITY (ELECTRO / STATUES)
+-- SPECIAL TARGET LOGIC
 local function GetBestTarget(enemies)
     local electroHum, electroRoot
     local statues = {}
@@ -194,18 +197,25 @@ local function SetupCharacter(char)
     LastSwingTime = 0
     IdleTimer = 0
     LastPosition = HRP.Position
+    DungeonStarted = false
 
     if HeartbeatConnection then
         HeartbeatConnection:Disconnect()
     end
 
     HeartbeatConnection = RunService.Heartbeat:Connect(function(dt)
-        if IsRestrictedPlace() or Humanoid.Health <= 0 or not AutoFarm then return end
+        if IsRestrictedPlace() or Humanoid.Health <= 0 or not AutoFarm then
+            IdleTimer = 0
+            return
+        end
 
         -- Carry delay
         if CarryMode then
             CarryStartTime = CarryStartTime or tick()
-            if tick() - CarryStartTime < CARRY_DELAY then return end
+            if tick() - CarryStartTime < CARRY_DELAY then
+                IdleTimer = 0
+                return
+            end
         else
             CarryStartTime = nil
         end
@@ -220,10 +230,12 @@ local function SetupCharacter(char)
 
         -- No collide
         for _, p in ipairs(Character:GetDescendants()) do
-            if p:IsA("BasePart") then p.CanCollide = false end
+            if p:IsA("BasePart") then
+                p.CanCollide = false
+            end
         end
 
-        -- Move above mob
+        -- TP
         local offset = (target == GetRoseRoot()) and 1 or HeightAboveMob
         local pos = target.Position + Vector3.new(0, offset, 0)
         local dir = pos - HRP.Position
@@ -233,7 +245,7 @@ local function SetupCharacter(char)
             Vector3.new(target.Position.X, HRP.Position.Y, target.Position.Z)
         )
 
-        -- Attack
+        -- ATTACK
         local attacking = false
         local dist = (target.Position - HRP.Position).Magnitude
         if dist <= SwingDistance then
@@ -244,7 +256,7 @@ local function SetupCharacter(char)
             end
         end
 
-        -- Spells ONLY when attacking
+        -- SPELLS ONLY WHILE ATTACKING
         if AutoSpell and attacking then
             for _, k in ipairs({"Q","E","R"}) do
                 local s = LocalPlayer:FindFirstChild("spell"..k)
@@ -256,7 +268,7 @@ local function SetupCharacter(char)
             end
         end
 
-        -- RESET SI INACTIF (SEULEMENT APRÈS START DUNGEON)
+        -- RESET ONLY AFTER DUNGEON STARTED
         if DungeonStarted then
             local moved = (HRP.Position - LastPosition).Magnitude
             if moved < 1 and not attacking then
@@ -276,6 +288,7 @@ local function SetupCharacter(char)
     end)
 end
 
+-- CHARACTER LOAD
 if LocalPlayer.Character then
     SetupCharacter(LocalPlayer.Character)
 end
@@ -288,8 +301,7 @@ end)
 -- AUTO START DUNGEON (NEW EVENT)
 task.spawn(function()
     while task.wait(1) do
-        if IsRestrictedPlace() or not AutoStartDungeon then
-            DungeonStarted = false
+        if IsRestrictedPlace() or not AutoStartDungeon or DungeonStarted then
             continue
         end
 
@@ -297,7 +309,7 @@ task.spawn(function()
         local main = gui and gui:FindFirstChild("mainGui")
         local btn = main and main:FindFirstChild("startDungeon")
 
-        if btn and btn.Visible and not DungeonStarted then
+        if btn and btn.Visible then
             local delay = DungeonStartDelay[GetSessionName()] or 0
             task.wait(delay)
 
@@ -306,14 +318,15 @@ task.spawn(function()
             end
 
             task.wait(3)
-
             ReplicatedStorage:WaitForChild("StartDungeon"):FireServer(true, true)
+
             DungeonStarted = true
         end
     end
 end)
 
-
+-- =========================================================
+-- UI
 Tabs.Main:AddToggle("AutoFarmTP", {
     Title = "Auto Farm TP",
     Default = false,
@@ -336,6 +349,7 @@ Tabs.Main:AddToggle("CarryMode", {
     Default = false,
     Callback = function(v)
         CarryMode = v
+        TpSpeed = v and CARRY_TP_SPEED or NORMAL_TP_SPEED
     end
 })
 
@@ -350,6 +364,7 @@ Tabs.Main:AddSlider("HeightAboveMob", {
         HeightAboveMob = v
     end
 })
+
 -- =========================================================
 -- STOP PLAYER MONITOR (CHECK H24)
 local TeleportService = game:GetService("TeleportService")
