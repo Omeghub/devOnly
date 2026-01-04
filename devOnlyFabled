@@ -85,7 +85,7 @@ local AutoSpell = false
 local AutoStartDungeon = false
 local CarryMode = false
 
-local AttackDelay = 1
+local AttackDelay = 0.7
 local SpellDelay = 0.05
 local HeightAboveMob = 25
 local NORMAL_TP_SPEED = 100
