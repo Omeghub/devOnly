@@ -417,7 +417,7 @@ local function fireRetry(reason)
 
         if _G.sendAlertWebhook then
             _G.sendAlertWebhook(
-                "Auto Retry",
+                "Auto Retry Dungeon Finish",
                 reason
             )
         end
