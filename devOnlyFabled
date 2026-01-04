@@ -69,8 +69,7 @@ local Tabs = {
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
 -- =========================================================
--- AUTO FARM TP + AUTO START + CARRY
--- RESET ONLY AFTER DUNGEON START
+-- AUTO FARM TP + AUTO START + CARRY + RESET
 repeat task.wait() until game:IsLoaded()
 
 -- SERVICES
@@ -91,13 +90,12 @@ local CarryMode = false
 local AttackDelay = 1
 local SpellDelay = 0.05
 local HeightAboveMob = 25
-local TpSpeed = 100
 local NORMAL_TP_SPEED = 100
 local CARRY_TP_SPEED = 50
+local TpSpeed = NORMAL_TP_SPEED
 local SwingDistance = 35
-
+local IDLE_RESET_TIME = 10 -- secondes avant reset
 local CARRY_DELAY = 90
-local IDLE_RESET_TIME = 10
 
 -- AUTO START DELAYS
 local DungeonStartDelay = {
@@ -110,13 +108,14 @@ local DungeonStartDelay = {
 -- STATE
 local Character, HRP, Humanoid
 local HeartbeatConnection
-local DungeonStarted = false
-local CarryStartTime = nil
 local LastSwingTime = 0
 local IdleTimer = 0
 local LastPosition = nil
+local CarryStartTime = nil
+local DungeonStarted = false
 
 -- =========================================================
+-- UTILS
 local function IsRestrictedPlace()
     return game.PlaceId == RESTRICTED_PLACE
 end
@@ -134,7 +133,6 @@ local function GetModelRoot(model)
     end
 end
 
--- SPECIAL TARGET LOGIC
 local function GetBestTarget(enemies)
     local electroHum, electroRoot
     local statues = {}
@@ -144,17 +142,14 @@ local function GetBestTarget(enemies)
         if mob:IsA("Model") then
             local hum = mob:FindFirstChildOfClass("Humanoid")
             local root = GetModelRoot(mob)
-
             if hum and root and hum.Health > 0 then
                 if mob.Name == "Electro Elemental" then
                     electroHum = hum
                     electroRoot = root
                 end
-
                 if mob.Name:find("Powered Statue") then
                     table.insert(statues, root)
                 end
-
                 local dist = (root.Position - HRP.Position).Magnitude
                 if dist < shortest then
                     shortest = dist
@@ -167,15 +162,12 @@ local function GetBestTarget(enemies)
     if electroHum and electroHum.Health == 10000000 and #statues > 0 then
         return statues[1]
     end
-
     if electroHum and electroHum.Health < 10000000 then
         return electroRoot
     end
-
     if #statues > 0 then
         return statues[1]
     end
-
     return closest
 end
 
@@ -197,30 +189,26 @@ local function SetupCharacter(char)
     LastSwingTime = 0
     IdleTimer = 0
     LastPosition = HRP.Position
-    DungeonStarted = false
 
     if HeartbeatConnection then
         HeartbeatConnection:Disconnect()
     end
 
     HeartbeatConnection = RunService.Heartbeat:Connect(function(dt)
-        if IsRestrictedPlace() or Humanoid.Health <= 0 or not AutoFarm then
+        if IsRestrictedPlace() or not Character or Humanoid.Health <= 0 or not AutoFarm then
             IdleTimer = 0
             return
         end
 
-        -- Carry delay
+        -- CARRY MODE
         if CarryMode then
-            CarryStartTime = CarryStartTime or tick()
-            if tick() - CarryStartTime < CARRY_DELAY then
-                IdleTimer = 0
-                return
-            end
+            if not CarryStartTime then CarryStartTime = tick() end
+            if tick() - CarryStartTime < CARRY_DELAY then return end
         else
             CarryStartTime = nil
         end
 
-        -- Target
+        -- TARGET
         local target = GetRoseRoot()
         if not target then
             local enemies = workspace:FindFirstChild("Enemies")
@@ -228,11 +216,9 @@ local function SetupCharacter(char)
         end
         if not target then return end
 
-        -- No collide
+        -- NO COLLIDE
         for _, p in ipairs(Character:GetDescendants()) do
-            if p:IsA("BasePart") then
-                p.CanCollide = false
-            end
+            if p:IsA("BasePart") then p.CanCollide = false end
         end
 
         -- TP
@@ -240,10 +226,7 @@ local function SetupCharacter(char)
         local pos = target.Position + Vector3.new(0, offset, 0)
         local dir = pos - HRP.Position
         HRP.Velocity = dir.Magnitude > 2 and dir.Unit * TpSpeed or Vector3.zero
-        HRP.CFrame = CFrame.lookAt(
-            HRP.Position,
-            Vector3.new(target.Position.X, HRP.Position.Y, target.Position.Z)
-        )
+        HRP.CFrame = CFrame.lookAt(HRP.Position, Vector3.new(target.Position.X, HRP.Position.Y, target.Position.Z))
 
         -- ATTACK
         local attacking = false
@@ -256,7 +239,7 @@ local function SetupCharacter(char)
             end
         end
 
-        -- SPELLS ONLY WHILE ATTACKING
+        -- SPELLS
         if AutoSpell and attacking then
             for _, k in ipairs({"Q","E","R"}) do
                 local s = LocalPlayer:FindFirstChild("spell"..k)
@@ -268,16 +251,15 @@ local function SetupCharacter(char)
             end
         end
 
-        -- RESET ONLY AFTER DUNGEON STARTED
-        if DungeonStarted then
-            local moved = (HRP.Position - LastPosition).Magnitude
-            if moved < 1 and not attacking then
-                IdleTimer += dt
-                if IdleTimer >= IDLE_RESET_TIME then
+        -- RESET SI INACTIF
+        local moved = (HRP.Position - LastPosition).Magnitude
+        local isMoving = moved > 0.5
+        if not isMoving and not attacking then
+            IdleTimer = IdleTimer + dt
+            if IdleTimer >= IDLE_RESET_TIME then
+                if Character and Humanoid and Humanoid.Health > 0 then
                     Character:BreakJoints()
-                    IdleTimer = 0
                 end
-            else
                 IdleTimer = 0
             end
         else
@@ -288,6 +270,7 @@ local function SetupCharacter(char)
     end)
 end
 
+-- =========================================================
 -- CHARACTER LOAD
 if LocalPlayer.Character then
     SetupCharacter(LocalPlayer.Character)
@@ -298,7 +281,7 @@ LocalPlayer.CharacterAdded:Connect(function(char)
 end)
 
 -- =========================================================
--- AUTO START DUNGEON (NEW EVENT)
+-- AUTO START DUNGEON
 task.spawn(function()
     while task.wait(1) do
         if IsRestrictedPlace() or not AutoStartDungeon or DungeonStarted then
@@ -319,7 +302,6 @@ task.spawn(function()
 
             task.wait(3)
             ReplicatedStorage:WaitForChild("StartDungeon"):FireServer(true, true)
-
             DungeonStarted = true
         end
     end
@@ -364,7 +346,6 @@ Tabs.Main:AddSlider("HeightAboveMob", {
         HeightAboveMob = v
     end
 })
-
 -- =========================================================
 -- STOP PLAYER MONITOR (CHECK H24)
 local TeleportService = game:GetService("TeleportService")
