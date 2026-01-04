@@ -85,7 +85,7 @@ local AutoSpell = false
 local AutoStartDungeon = false
 local CarryMode = false
 
-local AttackDelay = 0.7
+local AttackDelay = 1
 local SpellDelay = 0.05
 local HeightAboveMob = 25
 local NORMAL_TP_SPEED = 100
@@ -193,12 +193,19 @@ RunService.Heartbeat:Connect(function(dt)
     local movedDistance = (HRP.Position - LastPosition).Magnitude
     local isMoving = movedDistance > MOVE_THRESHOLD
 
-    if not isMoving then
-        IdleTimer = IdleTimer + dt
-        if IdleTimer >= IDLE_RESET_TIME then
-            if Humanoid and Humanoid.Health > 0 then
-                Character:BreakJoints()
+    local sessionName = GetSessionName() or ""
+    local disableReset = sessionName == "Temporal Chamber"
+
+    if not disableReset then
+        if not isMoving then
+            IdleTimer = IdleTimer + dt
+            if IdleTimer >= IDLE_RESET_TIME then
+                if Humanoid and Humanoid.Health > 0 then
+                    Character:BreakJoints()
+                end
+                IdleTimer = 0
             end
+        else
             IdleTimer = 0
         end
     else
@@ -261,7 +268,6 @@ RunService.Heartbeat:Connect(function(dt)
     end
 end)
 
-
 if LocalPlayer.Character then
     SetupCharacter(LocalPlayer.Character)
 end
@@ -270,6 +276,7 @@ LocalPlayer.CharacterAdded:Connect(function(char)
     task.wait(1)
     SetupCharacter(char)
 end)
+
 
 -- =========================================================
 -- AUTO START DUNGEON
@@ -347,6 +354,7 @@ local StopPlayers = {
     ["Westrile"] = true, -- dev
     ["A_Steph"] = true, -- Admin
     ["0Sponk"] = true, --game staff
+    ["S1rDead"] = true, --game staff
     ["pPinkUnicorNn"] = true, --game staff -- test
     ["SirPixelP"] = true -- Owner
 }
