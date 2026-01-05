@@ -1,0 +1,267 @@
+
+local function LoadModule(url)
+    local module
+    repeat
+        local success, result = pcall(function()
+            return loadstring(game:HttpGet(url))()
+        end)
+        if success then
+            module = result
+        else
+            warn("Module non chargé, retry dans 1s : "..url)
+            wait(1)
+        end
+    until module
+    return module
+end
+
+local player = game.Players.LocalPlayer
+repeat wait() until player and player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+--
+if getgenv().ReinjectLoaded then return end
+getgenv().ReinjectLoaded = true
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+local ScriptURL = "https://raw.githubusercontent.com/Omegahub1/test/refs/heads/main/FabledLegacytesting"
+
+local queue = queue_on_teleport 
+           or (syn and syn.queue_on_teleport) 
+           or (fluxus and fluxus.queue_on_teleport) 
+           or queueonteleport
+
+if not queue then
+    return
+end
+
+local TeleportQueued = false
+
+LocalPlayer.OnTeleport:Connect(function()
+    if TeleportQueued then return end
+    TeleportQueued = true
+
+    queue([[
+        repeat task.wait() until game:IsLoaded()
+        task.wait(2)
+        loadstring(game:HttpGet("]]..ScriptURL..[[", true))()
+    ]])
+end)
+--=======================================================
+-- UI
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/Omeghub/OmegaHubtest/refs/heads/main/UiSave"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/Omeghub/OmegaHubtest/refs/heads/main/Interface"))()
+
+local Window = Fluent:CreateWindow({
+   Title = "OmegaHub | Fabled-Legacy",
+   TabWidth = 160,
+   Size = UDim2.fromOffset(580, 460),
+   Theme = "Dark",
+   Acrylic = false,
+   MinimizeKey = Enum.KeyCode.End
+})
+
+local Tabs = {
+    Main = Window:AddTab({ Title = "Auto Farm", Icon = "swords" }),
+    Tower = Window:AddTab({ Title = "Infinite Towers", Icon = "sword" }),
+    Stats = Window:AddTab({ Title = "Stats", Icon = "trending-up" }),
+    Sell = Window:AddTab({Title = "Sell", Icon = "layers" }),
+    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
+}
+-- ========================================================
+-- AUTO FARM SYSTEM
+
+local AutoFarmValue = Instance.new("BoolValue")
+AutoFarmValue.Value = false
+
+local AutoSpellValue = Instance.new("BoolValue")
+AutoSpellValue.Value = false
+
+local AutoStartDungeon = false
+local DungeonStarted = false
+local executedDungeons = {}
+
+-- ========================================================
+-- DUNGEON SCRIPTS
+local DungeonScripts = {
+    ["Raided Village"] = "https://raw.githubusercontent.com/Omeghub/FabledlegacyDungeon/refs/heads/main/Afirstdungeon",
+    ["Sunken Fortress"] = "https://raw.githubusercontent.com/Omeghub/FabledlegacyDungeon/refs/heads/main/Btwodungeon",
+    ["Cursed Marshes"] = "https://raw.githubusercontent.com/Omeghub/FabledlegacyDungeon/refs/heads/main/Cthirddungeon",
+    ["Ragnarök's Descent"] = "https://raw.githubusercontent.com/Omeghub/FabledlegacyDungeon/refs/heads/main/Dfourdungeon",
+    ["Thundering Peaks"] = "https://raw.githubusercontent.com/Omeghub/FabledlegacyDungeon/refs/heads/main/Efivedungeon",
+    ["Fallen Paradise"] = "https://raw.githubusercontent.com/Omeghub/FabledlegacyDungeon/refs/heads/main/Fsixdungeon",
+    ["Eternal Domain"] = "",
+    ["Stardust Citadel"] = "",
+    ["Ethereal Farlands"] = "",
+    ["Hellbound Sanctum"] = "",
+    ["Forsaken Limbo"] = "",
+    ["Neon District"] = "",
+}
+
+-- ========================================================
+-- SERVICES
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+
+-- ========================================================
+-- RESTRICTED PLACE
+local RESTRICTED_PLACE = 11872917490
+local function IsRestrictedPlace()
+    return game.PlaceId == RESTRICTED_PLACE
+end
+
+-- ========================================================
+-- MAIN LOOP
+task.spawn(function()
+    while task.wait(1) do
+        -- ========================
+        -- DUNGEON LOADER
+        local settings = Workspace:FindFirstChild("DungeonSettings")
+        local session = settings and settings:FindFirstChild("SessionName")
+
+        if session then
+            local dungeonName = session.Value
+            if not executedDungeons[dungeonName] then
+                local url = DungeonScripts[dungeonName]
+                if url and url ~= "" then
+                    local success, err = pcall(function()
+                        local dungeonFunction = loadstring(game:HttpGet(url))()
+                        dungeonFunction(AutoFarmValue, AutoSpellValue)
+                        executedDungeons[dungeonName] = true
+                    end)
+                    if not success then
+                        warn("Erreur lors du chargement du dungeon " .. dungeonName .. ": " .. err)
+                    end
+                end
+            end
+        end
+
+        -- ========================
+        -- AUTO START DUNGEON
+        if AutoStartDungeon and not DungeonStarted and not IsRestrictedPlace() then
+            local gui = LocalPlayer:FindFirstChild("PlayerGui")
+            local main = gui and gui:FindFirstChild("mainGui")
+            local btn = main and main:FindFirstChild("startDungeon")
+
+            if btn and btn:IsA("GuiObject") and btn.Visible then
+                local equipBest = ReplicatedStorage:FindFirstChild("EquipBest")
+                if equipBest then
+                    equipBest:FireServer()
+                end
+
+                local startEvent = ReplicatedStorage:WaitForChild("StartDungeon")
+                local args = {{true, "lol"}}
+                startEvent:FireServer(unpack(args))
+
+                DungeonStarted = true
+            end
+        end
+    end
+end)
+
+Tabs.Main:AddToggle("AutoFarmTP", {
+    Title = "Auto Farm TP",
+    Default = false,
+    Callback = function(v)
+        AutoFarmValue.Value = v
+        AutoStartDungeon = v
+    end
+})
+
+Tabs.Main:AddToggle("AutoSpell", {
+    Title = "Auto Spell Q/E/R",
+    Default = false,
+    Callback = function(v)
+        AutoSpellValue.Value = v
+    end
+})
+
+-- =========================================================
+-- AUTO RETRY (FAIL + COMPLETION)
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+local AutoRetry = false
+local Connections = {}
+
+local function fireRetry(reason)
+    if not AutoRetry then return end
+    if _G.ForceReturnToLobby then return end
+
+    local voteRemote = ReplicatedStorage:FindFirstChild("voteRemote")
+    if voteRemote then
+        warn("🔁 Auto Retry triggered:", reason)
+        voteRemote:FireServer("repeat")
+
+        if _G.sendAlertWebhook then
+            _G.sendAlertWebhook(
+                "Auto Retry Dungeon Finish",
+                reason
+            )
+        end
+    end
+end
+
+local function SetupAutoRetry()
+    -- éviter double setup
+    if #Connections > 0 then return end
+
+    local gui = LocalPlayer:WaitForChild("PlayerGui")
+    local completionScreen = gui:WaitForChild("CompletionScreen")
+
+    local failedFrame = completionScreen:WaitForChild("failedFrame")
+    local completionBorder = completionScreen:WaitForChild("CompletionBorder")
+
+    -- ❌ DUNGEON FAILED
+    table.insert(Connections,
+        failedFrame:GetPropertyChangedSignal("Visible"):Connect(function()
+            if failedFrame.Visible then
+                fireRetry("Dungeon failed")
+            end
+        end)
+    )
+
+    -- ✅ DUNGEON COMPLETED
+    table.insert(Connections,
+        completionBorder:GetPropertyChangedSignal("Visible"):Connect(function()
+            if completionBorder.Visible then
+                fireRetry("Dungeon completed")
+            end
+        end)
+    )
+end
+
+local function StopAutoRetry()
+    AutoRetry = false
+    for _, c in ipairs(Connections) do
+        pcall(function() c:Disconnect() end)
+    end
+    Connections = {}
+end
+
+Tabs.Main:AddToggle("AutoRetry", {
+    Title = "Auto Retry (Fail + Win)",
+    Default = false,
+    Callback = function(v)
+        AutoRetry = v
+        if v then
+            SetupAutoRetry()
+        else
+            StopAutoRetry()
+        end
+    end
+})
+
+-- =========================================================
+-- CONFIG
+SaveManager:SetLibrary(Fluent)
+InterfaceManager:SetLibrary(Fluent)
+SaveManager:IgnoreThemeSettings()
+InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+SaveManager:BuildConfigSection(Tabs.Settings)
+SaveManager:LoadAutoloadConfig()
+Window:SelectTab(1)
