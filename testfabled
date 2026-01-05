@@ -69,7 +69,7 @@ local Tabs = {
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
 -- ========================================================
--- AUTO FARM SYSTEM
+-- AUTO FARM SYSTEM (SANS AUTO START DUNGEON)
 
 local AutoFarmValue = Instance.new("BoolValue")
 AutoFarmValue.Value = false
@@ -77,12 +77,8 @@ AutoFarmValue.Value = false
 local AutoSpellValue = Instance.new("BoolValue")
 AutoSpellValue.Value = false
 
-local AutoStartDungeon = false
-local DungeonStarted = false
 local executedDungeons = {}
 
--- ========================================================
--- DUNGEON SCRIPTS
 local DungeonScripts = {
     ["Raided Village"] = "https://raw.githubusercontent.com/Omeghub/FabledlegacyDungeon/refs/heads/main/Afirstdungeon",
     ["Sunken Fortress"] = "https://raw.githubusercontent.com/Omeghub/FabledlegacyDungeon/refs/heads/main/Btwodungeon",
@@ -98,31 +94,21 @@ local DungeonScripts = {
     ["Neon District"] = "",
 }
 
--- ========================================================
--- SERVICES
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
 -- ========================================================
--- RESTRICTED PLACE
-local RESTRICTED_PLACE = 11872917490
-local function IsRestrictedPlace()
-    return game.PlaceId == RESTRICTED_PLACE
-end
-
--- ========================================================
 -- MAIN LOOP
 task.spawn(function()
     while task.wait(1) do
-        -- ========================
-        -- DUNGEON LOADER
         local settings = Workspace:FindFirstChild("DungeonSettings")
         local session = settings and settings:FindFirstChild("SessionName")
 
         if session then
             local dungeonName = session.Value
+
             if not executedDungeons[dungeonName] then
                 local url = DungeonScripts[dungeonName]
                 if url and url ~= "" then
@@ -131,6 +117,7 @@ task.spawn(function()
                         dungeonFunction(AutoFarmValue, AutoSpellValue)
                         executedDungeons[dungeonName] = true
                     end)
+
                     if not success then
                         warn("Erreur lors du chargement du dungeon " .. dungeonName .. ": " .. err)
                     end
@@ -138,35 +125,23 @@ task.spawn(function()
             end
         end
 
-        -- ========================
-        -- AUTO START DUNGEON
-        if AutoStartDungeon and not DungeonStarted and not IsRestrictedPlace() then
-            local gui = LocalPlayer:FindFirstChild("PlayerGui")
-            local main = gui and gui:FindFirstChild("mainGui")
-            local btn = main and main:FindFirstChild("startDungeon")
-
-            if btn and btn:IsA("GuiObject") and btn.Visible then
-                local equipBest = ReplicatedStorage:FindFirstChild("EquipBest")
-                if equipBest then
-                    equipBest:FireServer()
-                end
-
-                local startEvent = ReplicatedStorage:WaitForChild("StartDungeon")
-                local args = {{true, "hello"}}
-                startEvent:FireServer(unpack(args))
-
-                DungeonStarted = true
+        -- Spawn Companion (si présent)
+        if AutoFarmValue.Value and Workspace:FindFirstChild("CompanionPart") then
+            local spawnComp = ReplicatedStorage:FindFirstChild("SpawnCompanion")
+            if spawnComp then
+                spawnComp:FireServer()
             end
         end
     end
 end)
 
+-- ========================================================
+-- UI
 Tabs.Main:AddToggle("AutoFarmTP", {
     Title = "Auto Farm TP",
     Default = false,
     Callback = function(v)
         AutoFarmValue.Value = v
-        AutoStartDungeon = v
     end
 })
 
@@ -177,197 +152,6 @@ Tabs.Main:AddToggle("AutoSpell", {
         AutoSpellValue.Value = v
     end
 })
-
--- =========================================================
--- AUTO RETRY (FAIL + COMPLETION)
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local LocalPlayer = Players.LocalPlayer
-
-local AutoRetry = false
-local Connections = {}
-
-local function fireRetry(reason)
-    if not AutoRetry then return end
-    if _G.ForceReturnToLobby then return end
-
-    local voteRemote = ReplicatedStorage:FindFirstChild("voteRemote")
-    if voteRemote then
-        warn("🔁 Auto Retry triggered:", reason)
-        voteRemote:FireServer("repeat")
-
-        if _G.sendAlertWebhook then
-            _G.sendAlertWebhook(
-                "Auto Retry Dungeon Finish",
-                reason
-            )
-        end
-    end
-end
-
-local function SetupAutoRetry()
-    -- éviter double setup
-    if #Connections > 0 then return end
-
-    local gui = LocalPlayer:WaitForChild("PlayerGui")
-    local completionScreen = gui:WaitForChild("CompletionScreen")
-
-    local failedFrame = completionScreen:WaitForChild("failedFrame")
-    local completionBorder = completionScreen:WaitForChild("CompletionBorder")
-
-    -- ❌ DUNGEON FAILED
-    table.insert(Connections,
-        failedFrame:GetPropertyChangedSignal("Visible"):Connect(function()
-            if failedFrame.Visible then
-                fireRetry("Dungeon failed")
-            end
-        end)
-    )
-
-    -- ✅ DUNGEON COMPLETED
-    table.insert(Connections,
-        completionBorder:GetPropertyChangedSignal("Visible"):Connect(function()
-            if completionBorder.Visible then
-                fireRetry("Dungeon completed")
-            end
-        end)
-    )
-end
-
-local function StopAutoRetry()
-    AutoRetry = false
-    for _, c in ipairs(Connections) do
-        pcall(function() c:Disconnect() end)
-    end
-    Connections = {}
-end
-
-Tabs.Main:AddToggle("AutoRetry", {
-    Title = "Auto Retry (Fail + Win)",
-    Default = false,
-    Callback = function(v)
-        AutoRetry = v
-        if v then
-            SetupAutoRetry()
-        else
-            StopAutoRetry()
-        end
-    end
-})
--- =========================================================
--- AUTO SMART SWITCH DUNGEON
-
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
-local LocalPlayer = Players.LocalPlayer
-
-local AutoSwitchDungeon = false
-local LastSwitchSignature = ""
-
-Tabs.Main:AddToggle("AutoSmartSwitch", {
-    Title = "Auto Switch Dungeon (Smart)",
-    Default = false,
-    Callback = function(v)
-        AutoSwitchDungeon = v
-    end
-})
-
-local DungeonOrder = {
-    "Raided Village",
-    "Sunken Fortress",
-    "Cursed Marshes",
-    "Ragnarök's Descent",
-    "Thundering Peaks",
-    "Fallen Paradise",
-    "Eternal Domain",
-    "Stardust Citadel",
-    "Ethereal Farlands",
-    "Hellbound Sanctum",
-    "Forsaken Limbo",
-    "Neon District"
-}
-
-local DungeonReqs = {
-    ["Raided Village"]     = {Normal=1,   Expert=5,   Chaos=10,  Calamity=15},
-    ["Sunken Fortress"]    = {Normal=20,  Expert=25,  Chaos=30,  Calamity=35},
-    ["Cursed Marshes"]     = {Normal=40,  Expert=45,  Chaos=50,  Calamity=55},
-    ["Ragnarök's Descent"] = {Normal=60,  Expert=65,  Chaos=70,  Calamity=75},
-    ["Thundering Peaks"]   = {Normal=80,  Expert=85,  Chaos=90,  Calamity=95},
-    ["Fallen Paradise"]    = {Normal=100, Expert=105, Chaos=110, Calamity=115},
-    ["Eternal Domain"]     = {Normal=120, Expert=125, Chaos=130, Calamity=135},
-    ["Stardust Citadel"]   = {Normal=140, Expert=145, Chaos=150, Calamity=155},
-    ["Ethereal Farlands"]  = {Normal=160, Expert=165, Chaos=170, Calamity=175},
-    ["Hellbound Sanctum"]  = {Normal=180, Expert=185, Chaos=190, Calamity=195},
-    ["Forsaken Limbo"]     = {Normal=200, Expert=205, Chaos=210, Calamity=215},
-    ["Neon District"]      = {Normal=220, Expert=225, Chaos=230, Calamity=235},
-}
-
-local DifficultyOrder = { "Normal", "Expert", "Chaos", "Calamity" }
-
-local function GetBestDungeonAndDifficulty(level)
-    local bestDungeon = nil
-    local bestDifficulty = nil
-
-    for _, dungeon in ipairs(DungeonOrder) do
-        for i = #DifficultyOrder, 1, -1 do
-            local diff = DifficultyOrder[i]
-            local req = DungeonReqs[dungeon][diff]
-
-            if level >= req then
-                bestDungeon = dungeon
-                bestDifficulty = diff
-                break
-            end
-        end
-    end
-
-    return bestDungeon, bestDifficulty
-end
-
-task.spawn(function()
-    while task.wait(2) do
-        if not AutoSwitchDungeon then continue end
-
-        local data = LocalPlayer:FindFirstChild("data")
-        local levelValue = data and data:FindFirstChild("level")
-        if not levelValue then continue end
-
-        local dungeonSettings = workspace:FindFirstChild("DungeonSettings")
-        if not dungeonSettings then continue end
-
-        local currentDungeon = dungeonSettings:FindFirstChild("SessionName")
-        local currentDifficulty = dungeonSettings:FindFirstChild("Difficulty")
-        if not currentDungeon or not currentDifficulty then continue end
-
-        local level = levelValue.Value
-        local bestDungeon, bestDifficulty = GetBestDungeonAndDifficulty(level)
-
-        if not bestDungeon or not bestDifficulty then continue end
-
-        local signature = bestDungeon .. "|" .. bestDifficulty
-        if signature == LastSwitchSignature then continue end
-
-        if currentDungeon.Value == bestDungeon and currentDifficulty.Value == bestDifficulty then
-            LastSwitchSignature = signature
-            continue
-        end
-
-        LastSwitchSignature = signature
-
-        ReplicatedStorage:WaitForChild("SwitchDungeon"):FireServer({
-            Map = bestDungeon,
-            Calamity = (bestDifficulty == "Calamity"),
-            Hardcore = false,
-            NoHit = false,
-            Difficulty = bestDifficulty,
-            LevelRequirement = level,
-            Tier = 0,
-            Private = false,
-            Easter = false
-        })
-    end
-end)
 -- =========================================================
 -- WebHook
 local Players = game:GetService("Players")
@@ -644,6 +428,350 @@ if allowedPlace then
 
     listenCompletion()
 end
+-- =========================================================
+-- AUTO INFINITE TOWER
+repeat task.wait() until game:IsLoaded()
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+local Character, HRP
+local AutoInfiniteTower = false
+
+local UsePortal1 = true
+local UsePortal2 = true
+local UsePortal3 = false
+
+local PromptDelay = 0.3
+local PortalDelay = 0.25
+local TreasureOffset = Vector3.new(0, 3, 0)
+
+local function SetupCharacter(char)
+    Character = char
+    HRP = char:WaitForChild("HumanoidRootPart")
+end
+
+if LocalPlayer.Character then
+    SetupCharacter(LocalPlayer.Character)
+end
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+    task.wait(1)
+    SetupCharacter(char)
+end)
+
+Tabs.Tower:AddToggle("AutoInfiniteTower", {
+    Title = "Auto Infinite Tower",
+    Default = false,
+    Callback = function(v)
+        AutoInfiniteTower = v
+    end
+})
+
+Tabs.Tower:AddToggle("Portal1", {
+    Title = "Use Portal 1",
+    Default = true,
+    Callback = function(v)
+        UsePortal1 = v
+    end
+})
+
+Tabs.Tower:AddToggle("Portal2", {
+    Title = "Use Portal 2",
+    Default = true,
+    Callback = function(v)
+        UsePortal2 = v
+    end
+})
+
+Tabs.Tower:AddToggle("Portal3", {
+    Title = "Use Portal 3",
+    Default = false,
+    Callback = function(v)
+        UsePortal3 = v
+    end
+})
+
+local function HandlePortals()
+    local gui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not gui then return end
+
+    local portalsGui = gui:FindFirstChild("Portals")
+    if not portalsGui then return end
+
+    local mainGroup = portalsGui:FindFirstChild("MainGroup")
+    if not mainGroup or not mainGroup.Visible then return end
+
+    if UsePortal1 then
+        ReplicatedStorage:WaitForChild("DisplayPortals"):FireServer(1)
+        task.wait(PortalDelay)
+    end
+
+    if UsePortal2 then
+        ReplicatedStorage:WaitForChild("DisplayPortals"):FireServer(2)
+        task.wait(PortalDelay)
+    end
+
+    if UsePortal3 then
+        ReplicatedStorage:WaitForChild("DisplayPortals"):FireServer(3)
+        task.wait(PortalDelay)
+    end
+end
+
+local function TpToTreasure()
+    if not HRP then return end
+
+    local treasure = workspace:FindFirstChild("Treasure")
+    if not treasure then return end
+
+    local ringPart = treasure:FindFirstChild("ringRewardsPart")
+    if not ringPart then return end
+
+    HRP.CFrame = ringPart.CFrame + TreasureOffset
+end
+
+local function FarmTowerRewards()
+    local treasure = workspace:FindFirstChild("Treasure")
+    if not treasure then return end
+
+    local ringPart = treasure:FindFirstChild("ringRewardsPart")
+    if not ringPart then return end
+
+    local promptFolder = ringPart:FindFirstChild("prompt")
+    if not promptFolder then return end
+
+    local prompt = promptFolder:FindFirstChildOfClass("ProximityPrompt")
+    if not prompt or not prompt.Enabled then return end
+
+    TpToTreasure()
+    task.wait(PromptDelay)
+
+    fireproximityprompt(prompt)
+end
+
+task.spawn(function()
+    while task.wait(0.3) do
+        if not AutoInfiniteTower then continue end
+
+        HandlePortals()
+        FarmTowerRewards()
+    end
+end)
+-- =========================================================
+-- AUTO STATS
+local AutoPhysical = false
+local AutoSpellStat = false
+local AutoHealth = false
+
+local function AddPoint(stat)
+    ReplicatedStorage.addSkillPoints:FireServer(stat, 1)
+end
+
+task.spawn(function()
+    while task.wait(0.2) do
+        
+        if not AutoPhysical and not AutoSpellStat and not AutoHealth then 
+            continue 
+        end
+        
+        local freeSP = LocalPlayer.data.freeSP.Value
+        if freeSP <= 0 then
+            task.wait(1)
+        else
+            if AutoPhysical then AddPoint("physical") end
+            if AutoSpellStat then AddPoint("spell") end
+            if AutoHealth then AddPoint("health") end
+        end
+    end
+end)
+
+
+Tabs.Stats:AddToggle("AutoPhysical", {
+    Title = "Auto Physical",
+    Default = false,
+    Callback = function(v) AutoPhysical = v end
+})
+
+Tabs.Stats:AddToggle("AutoSpellStat", {
+    Title = "Auto Spell",
+    Default = false,
+    Callback = function(v) AutoSpellStat = v end
+})
+
+Tabs.Stats:AddToggle("AutoHealth", {
+    Title = "Auto Health",
+    Default = false,
+    Callback = function(v) AutoHealth = v end
+})
+-- =========================================================
+-- AUTO SELL + AUTO RETURN + AUTO DUNGEON (SAFE)
+repeat task.wait() until game:IsLoaded()
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+_G.ForceReturnToLobby = _G.ForceReturnToLobby or false
+
+local AutoSell = false
+local SellPlaceId = 11872917490 -- lobby
+
+local OrderedRarities = { "common", "uncommon", "rare", "epic", "legendary", "heirloom" }
+local SellRarities = {}
+for _, r in ipairs(OrderedRarities) do
+    SellRarities[r] = false
+end
+
+Tabs.Sell:AddToggle("AutoSellToggle", {
+    Title = "Auto Sell + Dungeon",
+    Default = false,
+    Callback = function(v)
+        AutoSell = v
+    end
+})
+
+for _, rarity in ipairs(OrderedRarities) do
+    Tabs.Sell:AddToggle(rarity, {
+        Title = rarity:sub(1,1):upper()..rarity:sub(2),
+        Default = false,
+        Callback = function(v)
+            SellRarities[rarity] = v
+        end
+    })
+end
+
+local Dungeons = {
+    ["Raided Village"]      = { Normal=1,   Expert=5,   Chaos=10,  Calamity=15 },
+    ["Sunken Fortress"]     = { Normal=20,  Expert=25,  Chaos=30,  Calamity=35 },
+    ["Cursed Marshes"]      = { Normal=40,  Expert=45,  Chaos=50,  Calamity=55 },
+    ["Ragnarök's Descent"]  = { Normal=60,  Expert=65,  Chaos=70,  Calamity=75 },
+    ["Thundering Peaks"]    = { Normal=80,  Expert=85,  Chaos=90,  Calamity=95 },
+    ["Fallen Paradise"]     = { Normal=100, Expert=105, Chaos=110, Calamity=115 },
+    ["Eternal Domain"]      = { Normal=120, Expert=125, Chaos=130, Calamity=135 },
+    ["Stardust Citadel"]    = { Normal=140, Expert=145, Chaos=150, Calamity=155 },
+    ["Ethereal Farlands"]   = { Normal=160, Expert=165, Chaos=170, Calamity=175 },
+    ["Hellbound Sanctum"]   = { Normal=180, Expert=185, Chaos=190, Calamity=195 },
+    ["Forsaken Limbo"]      = { Normal=200, Expert=205, Chaos=210, Calamity=215 },
+    ["Neon District"]       = { Normal=220, Expert=225, Chaos=230, Calamity=235 },
+}
+
+local DifficultyOrder = { "Calamity", "Chaos", "Expert", "Normal" }
+
+local function InventoryIsFull()
+    local gui = LocalPlayer.PlayerGui
+    local inv = gui:FindFirstChild("Inventory")
+    if not inv then return false end
+
+    local limitLabel = inv.Inventory:FindFirstChild("Limit")
+    if not limitLabel then return false end
+
+    local used, max = limitLabel.Text:match("(%d+)%s*/%s*(%d+)")
+    if not used or not max then return false end
+
+    return tonumber(used) >= tonumber(max)
+end
+
+local function GetItemsToSell()
+    local inventory = LocalPlayer.PlayerGui.Inventory.Inventory.RightSide.ScrollingFrame
+    if not inventory then return nil end
+
+    local items = {
+        armors={}, rings={}, helmets={}, legs={},
+        spells={}, sigils={}, weapons={}
+    }
+
+    local found = false
+
+    for _, frame in ipairs(inventory:GetChildren()) do
+        if frame:IsA("Frame") and frame:FindFirstChild("itemStats") then
+            local s = frame.itemStats
+            if s.itemType and s.itemRarity and s.GUID then
+                local rarity = s.itemRarity.Value:lower()
+                if SellRarities[rarity] and items[s.itemType.Value] then
+                    table.insert(items[s.itemType.Value], s.GUID.Value)
+                    found = true
+                end
+            end
+        end
+    end
+
+    return found and items or nil
+end
+
+local function ReturnToLobby()
+    _G.ForceReturnToLobby = true
+    ReplicatedStorage.DungeonFail:FireServer()
+    task.wait(0.5)
+    ReplicatedStorage.voteRemote:FireServer("return")
+end
+
+local function SellItems()
+    local items = GetItemsToSell()
+    if not items then return end
+
+    ReplicatedStorage.EquipBest:FireServer()
+    task.wait(8)
+    ReplicatedStorage.sellItems:InvokeServer(items)
+    task.wait(1)
+    ReplicatedStorage.EquipBest:FireServer()
+end
+
+local function GetBestDungeon()
+    local level = LocalPlayer.data.level.Value
+    local bestMap, bestDiff, bestReq = nil, nil, 0
+
+    for map, diffs in pairs(Dungeons) do
+        for _, diff in ipairs(DifficultyOrder) do
+            local req = diffs[diff]
+            if req and level >= req and req > bestReq then
+                bestMap, bestDiff, bestReq = map, diff, req
+            end
+        end
+    end
+
+    return bestMap, bestDiff, bestReq
+end
+
+local function CreateAndStartDungeon()
+    local map, diff, req = GetBestDungeon()
+    if not map then return end
+
+    local args = {{
+        Map = map,
+        Difficulty = diff,
+        LevelRequirement = req,
+        Calamity = false,
+        Hardcore = false,
+        NoHit = false,
+        Tier = 0,
+        Private = false,
+        Easter = false
+    }}
+
+    ReplicatedStorage.CreateLobby:InvokeServer(unpack(args))
+    task.wait(1)
+    ReplicatedStorage.StartLobby:FireServer()
+end
+
+task.spawn(function()
+    while task.wait(1) do
+        if not AutoSell then continue end
+
+        if InventoryIsFull() and game.PlaceId ~= SellPlaceId then
+            ReturnToLobby()
+        end
+
+        if game.PlaceId == SellPlaceId then
+            SellItems()
+            task.wait(2)
+            CreateAndStartDungeon()
+            _G.ForceReturnToLobby = false
+        end
+    end
+end)
+
 -- =========================================================
 -- CONFIG
 SaveManager:SetLibrary(Fluent)
