@@ -152,7 +152,7 @@ task.spawn(function()
                 end
 
                 local startEvent = ReplicatedStorage:WaitForChild("StartDungeon")
-                local args = {{true, "lol"}}
+                local args = {{true, "hello"}}
                 startEvent:FireServer(unpack(args))
 
                 DungeonStarted = true
