@@ -255,7 +255,396 @@ Tabs.Main:AddToggle("AutoRetry", {
         end
     end
 })
+-- =========================================================
+-- AUTO SMART SWITCH DUNGEON
 
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local LocalPlayer = Players.LocalPlayer
+
+local AutoSwitchDungeon = false
+local LastSwitchSignature = ""
+
+Tabs.Main:AddToggle("AutoSmartSwitch", {
+    Title = "Auto Switch Dungeon (Smart)",
+    Default = false,
+    Callback = function(v)
+        AutoSwitchDungeon = v
+    end
+})
+
+local DungeonOrder = {
+    "Raided Village",
+    "Sunken Fortress",
+    "Cursed Marshes",
+    "Ragnarök's Descent",
+    "Thundering Peaks",
+    "Fallen Paradise",
+    "Eternal Domain",
+    "Stardust Citadel",
+    "Ethereal Farlands",
+    "Hellbound Sanctum",
+    "Forsaken Limbo",
+    "Neon District"
+}
+
+local DungeonReqs = {
+    ["Raided Village"]     = {Normal=1,   Expert=5,   Chaos=10,  Calamity=15},
+    ["Sunken Fortress"]    = {Normal=20,  Expert=25,  Chaos=30,  Calamity=35},
+    ["Cursed Marshes"]     = {Normal=40,  Expert=45,  Chaos=50,  Calamity=55},
+    ["Ragnarök's Descent"] = {Normal=60,  Expert=65,  Chaos=70,  Calamity=75},
+    ["Thundering Peaks"]   = {Normal=80,  Expert=85,  Chaos=90,  Calamity=95},
+    ["Fallen Paradise"]    = {Normal=100, Expert=105, Chaos=110, Calamity=115},
+    ["Eternal Domain"]     = {Normal=120, Expert=125, Chaos=130, Calamity=135},
+    ["Stardust Citadel"]   = {Normal=140, Expert=145, Chaos=150, Calamity=155},
+    ["Ethereal Farlands"]  = {Normal=160, Expert=165, Chaos=170, Calamity=175},
+    ["Hellbound Sanctum"]  = {Normal=180, Expert=185, Chaos=190, Calamity=195},
+    ["Forsaken Limbo"]     = {Normal=200, Expert=205, Chaos=210, Calamity=215},
+    ["Neon District"]      = {Normal=220, Expert=225, Chaos=230, Calamity=235},
+}
+
+local DifficultyOrder = { "Normal", "Expert", "Chaos", "Calamity" }
+
+local function GetBestDungeonAndDifficulty(level)
+    local bestDungeon = nil
+    local bestDifficulty = nil
+
+    for _, dungeon in ipairs(DungeonOrder) do
+        for i = #DifficultyOrder, 1, -1 do
+            local diff = DifficultyOrder[i]
+            local req = DungeonReqs[dungeon][diff]
+
+            if level >= req then
+                bestDungeon = dungeon
+                bestDifficulty = diff
+                break
+            end
+        end
+    end
+
+    return bestDungeon, bestDifficulty
+end
+
+task.spawn(function()
+    while task.wait(2) do
+        if not AutoSwitchDungeon then continue end
+
+        local data = LocalPlayer:FindFirstChild("data")
+        local levelValue = data and data:FindFirstChild("level")
+        if not levelValue then continue end
+
+        local dungeonSettings = workspace:FindFirstChild("DungeonSettings")
+        if not dungeonSettings then continue end
+
+        local currentDungeon = dungeonSettings:FindFirstChild("SessionName")
+        local currentDifficulty = dungeonSettings:FindFirstChild("Difficulty")
+        if not currentDungeon or not currentDifficulty then continue end
+
+        local level = levelValue.Value
+        local bestDungeon, bestDifficulty = GetBestDungeonAndDifficulty(level)
+
+        if not bestDungeon or not bestDifficulty then continue end
+
+        local signature = bestDungeon .. "|" .. bestDifficulty
+        if signature == LastSwitchSignature then continue end
+
+        if currentDungeon.Value == bestDungeon and currentDifficulty.Value == bestDifficulty then
+            LastSwitchSignature = signature
+            continue
+        end
+
+        LastSwitchSignature = signature
+
+        ReplicatedStorage:WaitForChild("SwitchDungeon"):FireServer({
+            Map = bestDungeon,
+            Calamity = (bestDifficulty == "Calamity"),
+            Hardcore = false,
+            NoHit = false,
+            Difficulty = bestDifficulty,
+            LevelRequirement = level,
+            Tier = 0,
+            Private = false,
+            Easter = false
+        })
+    end
+end)
+-- =========================================================
+-- WebHook
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local HttpService = game:GetService("HttpService")
+
+local HttpRequest =
+    (syn and syn.request)
+    or (http and http.request)
+    or http_request
+    or request
+    or (fluxus and fluxus.request)
+
+if not HttpRequest then
+    error("❌ Executor incompatible : HTTP requests non supportées")
+end
+
+local allowedPlace = true
+if game.PlaceId == 11872917490 then
+    warn("📌 Webhook désactivé dans cette map (11872917490) — pas de CompletionScreen détectable.")
+    allowedPlace = false
+end
+
+local WebhookFile = "Webhook.txt"
+local WebhookUrl = ""
+if pcall(function() return readfile(WebhookFile) end) then
+    WebhookUrl = readfile(WebhookFile)
+end
+
+local DiscordIdFile = "DiscordID.txt"
+local DiscordID = ""
+if pcall(function() return readfile(DiscordIdFile) end) then
+    DiscordID = readfile(DiscordIdFile)
+end
+
+local Section = Tabs.Main:AddSection("Webhook")
+
+Tabs.Main:AddInput("DiscordWebhook", {
+    Title = "Discord Webhook",
+    Description = "Paste your Discord webhook here",
+    Default = WebhookUrl,
+    Placeholder = "https://discord.com/api/webhooks/...",
+    Numeric = false,
+    Finished = false,
+    Callback = function(value)
+        WebhookUrl = value
+        pcall(function() writefile(WebhookFile, value) end)
+    end
+})
+
+Tabs.Main:AddInput("DiscordID", {
+    Title = "Your Discord ID",
+    Description = "Paste your Discord ID",
+    Default = DiscordID,
+    Placeholder = "123456789012345678",
+    Numeric = false,
+    Finished = false,
+    Callback = function(value)
+        DiscordID = value
+        pcall(function() writefile(DiscordIdFile, value) end)
+    end
+})
+
+local function postWebhook(payload)
+    if WebhookUrl == "" then return end
+    pcall(function()
+        HttpRequest({
+            Url = WebhookUrl,
+            Method = "POST",
+            Headers = { ["Content-Type"] = "application/json" },
+            Body = HttpService:JSONEncode(payload)
+        })
+    end)
+end
+
+local function getDungeonName()
+    local ds = workspace:FindFirstChild("DungeonSettings")
+    local session = ds and ds:FindFirstChild("SessionName")
+    return (session and session.Value ~= "" and session.Value) or "Unknown Dungeon"
+end
+
+local function formatNumber(num)
+    num = tonumber(num)
+    if not num then return "0" end
+
+    if num >= 1e15 then
+        return string.format("%.1fq", num / 1e15) -- Quadrillion
+    elseif num >= 1e12 then
+        return string.format("%.1fT", num / 1e12) -- Trillion
+    elseif num >= 1e9 then
+        return string.format("%.1fB", num / 1e9)  -- Billion
+    elseif num >= 1e6 then
+        return string.format("%.1fm", num / 1e6)  -- Million
+    elseif num >= 1e3 then
+        return string.format("%.1fk", num / 1e3)  -- Thousand
+    else
+        return tostring(num)
+    end
+end
+
+local function sendDungeonWebhook(coins, expGained, elapsed, rewards)
+    local data = LocalPlayer:FindFirstChild("data")
+    if not data then return end
+
+    local level = data.level.Value
+    local exp = formatNumber(data.exp.Value)
+    local expReq = formatNumber(data.expReq.Value)
+    local dungeonName = getDungeonName()
+
+    local rewardFields = {}
+    local mentionPing = ""
+
+    for _, r in ipairs(rewards) do
+        table.insert(rewardFields, {
+            name = r.name,
+            value = "**Rarity:** " .. r.rarity,
+            inline = true
+        })
+
+        if DiscordID ~= "" and (r.rarity:lower() == "legendary" or r.rarity:lower() == "heirloom") then
+            mentionPing = "<@" .. DiscordID .. ">"
+        end
+    end
+
+    if #rewardFields == 0 then
+        table.insert(rewardFields, {
+            name = "Rewards",
+            value = "Aucune récompense",
+            inline = false
+        })
+    end
+
+    postWebhook({
+        content = mentionPing,
+        username = "Omega-Hub",
+        embeds = {
+            {
+                title = "✅ Round Completed!",
+                color = 5763719,
+                fields = {
+                    {
+                        name = "👤 Account Information",
+                        value =
+                            "**Name:** Omega-Hub\n" ..
+                            "**Current Level:** " .. level .. "\n" ..
+                            "**Level Progression:** " .. exp .. " / " .. expReq,
+                        inline = false
+                    },
+                    {
+                        name = "🗺️ Dungeon Stats",
+                        value =
+                            "**Name:** " .. dungeonName .. "\n" ..
+                            "**Time:** " .. elapsed .. "\n" ..
+                            "**Coins Gained:** " .. coins .. "\n" ..
+                            "**EXP Gained:** " .. expGained,
+                        inline = false
+                    }
+                }
+            },
+            {
+                title = "🎁 Rewards",
+                color = 3447003,
+                fields = rewardFields
+            }
+        },
+        footer = { text = "Omega-Hub • " .. os.date("%d/%m/%Y %H:%M") }
+    })
+end
+-- =========================================================
+-- ALERT WEBHOOK (STOP / STUCK / FAIL)
+local function sendAlertWebhook(reason, extra)
+    if WebhookUrl == "" then return end
+
+    postWebhook({
+        username = "Omega-Hub",
+        embeds = {
+            {
+                title = "⚠️ Auto Farm Stopped",
+                color = 16753920, -- orange
+                fields = {
+                    {
+                        name = "👤 Player",
+                        value = LocalPlayer.Name,
+                        inline = true
+                    },
+                    {
+                        name = "🗺️ Dungeon",
+                        value = getDungeonName(),
+                        inline = true
+                    },
+                    {
+                        name = "⛔ Reason",
+                        value = reason,
+                        inline = false
+                    },
+                    {
+                        name = "📌 Details",
+                        value = extra or "N/A",
+                        inline = false
+                    }
+                },
+                footer = {
+                    text = "Omega-Hub • " .. os.date("%d/%m/%Y %H:%M")
+                }
+            }
+        }
+    })
+end
+
+_G.sendAlertWebhook = sendAlertWebhook
+
+local function fetchCompletionData()
+    local gui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not gui then return end
+
+    local screen = gui:FindFirstChild("CompletionScreen")
+    if not screen then return end
+
+    local border = screen:FindFirstChild("CompletionBorder")
+    if not border or not border.Visible then return end
+
+    local main = border:FindFirstChild("CompletionMain")
+    if not main then return end
+
+    local rewardFrame = main:FindFirstChild("RewardFrame")
+    if not rewardFrame then return end
+
+    local lastCount, stableTime, start = 0, 0, tick()
+    while tick() - start < 8 do
+        local count = #rewardFrame:GetChildren()
+        if count == lastCount then
+            stableTime += 0.1
+        else
+            stableTime = 0
+            lastCount = count
+        end
+        if stableTime >= 1 then break end
+        task.wait(0.1)
+    end
+
+    local rewards = {}
+    for _, frame in ipairs(rewardFrame:GetChildren()) do
+        if frame:IsA("Frame") then
+            local stats = frame:FindFirstChild("itemStats")
+            local nameVal = stats and stats:FindFirstChild("itemName")
+            if nameVal then
+                table.insert(rewards, { rarity = frame.Name, name = nameVal.Value })
+            end
+        end
+    end
+
+    local coins = main:FindFirstChild("CoinsValue") and main.CoinsValue.Text or "0"
+    local expGained = main:FindFirstChild("EXPValue") and main.EXPValue.Text or "0"
+    local elapsed = main:FindFirstChild("ElapsedValue") and main.ElapsedValue.Text or "0"
+
+    sendDungeonWebhook(coins, expGained, elapsed, rewards)
+end
+
+if allowedPlace then
+    local function listenCompletion()
+        local gui = LocalPlayer:WaitForChild("PlayerGui")
+        local screen = gui:FindFirstChild("CompletionScreen")
+        if not screen then return end
+        local border = screen:FindFirstChild("CompletionBorder")
+        if not border then return end
+
+        border:GetPropertyChangedSignal("Visible"):Connect(function()
+            if border.Visible then
+                task.wait(0.3)
+                fetchCompletionData()
+            end
+        end)
+    end
+
+    listenCompletion()
+end
 -- =========================================================
 -- CONFIG
 SaveManager:SetLibrary(Fluent)
