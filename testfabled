@@ -23,7 +23,7 @@ getgenv().ReinjectLoaded = true
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
-local ScriptURL = "https://raw.githubusercontent.com/Omeghub/devOnly/refs/heads/main/testfabled"
+local ScriptURL = "https://raw.githubusercontent.com/Omeghub/devOnly/refs/heads/main/tes.tfabled"
 
 local queue = queue_on_teleport 
            or (syn and syn.queue_on_teleport) 
