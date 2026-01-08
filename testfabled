@@ -69,8 +69,6 @@ local Tabs = {
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
 -- ========================================================
--- AUTO FARM SYSTEM
-local UIMinimized = false
 
 local AutoFarmValue = Instance.new("BoolValue")
 AutoFarmValue.Value = false
@@ -218,19 +216,16 @@ Tabs.Main:AddToggle("AutoSpell", {
     end
 })
 
-Tabs.Settings:AddToggle("ToggleUI", {
-    Title = "Cacher l'UI",
+Tabs.Main:AddToggle("ToggleUI", {
+    Title = "Cacher / Afficher l'UI",
+    Description = "Masque ou affiche toute l'interface",
     Default = false,
-    Callback = function(v)
-        UIMinimized = v
-
-        if v then
-            Window:Minimize()
-        else
-            Window:Restore()
-        end
+    Callback = function()
+        -- Fluent gère l'état automatiquement
+        Window:Minimize()
     end
 })
+
 
 -- =========================================================
 -- AUTO RETRY (FAIL + COMPLETION)
