@@ -69,10 +69,9 @@ local Tabs = {
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
 -- ========================================================
--- AUTO FARM SYSTEM (AUTO START DUNGEON - FIX FINAL)
--- ========================================================
+-- AUTO FARM SYSTEM
+local UIMinimized = false
 
--- Toggle values
 local AutoFarmValue = Instance.new("BoolValue")
 AutoFarmValue.Value = false
 
@@ -84,7 +83,6 @@ local executedDungeons = {}
 local DungeonStarted = false
 local AutoStartDungeon = false
 
--- Dungeon scripts
 local DungeonScripts = {
     ["Raided Village"] = "https://raw.githubusercontent.com/Omeghub/FabledlegacyDungeon/refs/heads/main/Afirstdungeon",
     ["Sunken Fortress"] = "https://raw.githubusercontent.com/Omeghub/FabledlegacyDungeon/refs/heads/main/Btwodungeon",
@@ -100,7 +98,6 @@ local DungeonScripts = {
     --["Neon District"] = "https://raw.githubusercontent.com/Omeghub/FabledlegacyDungeon/refs/heads/main/ltwelfthdungeon",
 }
 
--- Services
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -218,6 +215,20 @@ Tabs.Main:AddToggle("AutoSpell", {
     Default = false,
     Callback = function(v)
         AutoSpellValue.Value = v
+    end
+})
+
+Tabs.Settings:AddToggle("ToggleUI", {
+    Title = "Cacher l'UI",
+    Default = false,
+    Callback = function(v)
+        UIMinimized = v
+
+        if v then
+            Window:Minimize()
+        else
+            Window:Restore()
+        end
     end
 })
 
