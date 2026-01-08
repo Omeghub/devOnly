@@ -69,63 +69,116 @@ local Tabs = {
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
 -- ========================================================
--- AUTO FARM SYSTEM (SANS AUTO START DUNGEON)
+-- AUTO FARM SYSTEM (AUTO START DUNGEON - FIX FINAL)
+-- ========================================================
 
+-- Toggle values
 local AutoFarmValue = Instance.new("BoolValue")
 AutoFarmValue.Value = false
 
 local AutoSpellValue = Instance.new("BoolValue")
 AutoSpellValue.Value = false
 
+local EquipBestDone = false
 local executedDungeons = {}
+local DungeonStarted = false
+local AutoStartDungeon = false
 
+-- Dungeon scripts
 local DungeonScripts = {
     ["Raided Village"] = "https://raw.githubusercontent.com/Omeghub/FabledlegacyDungeon/refs/heads/main/Afirstdungeon",
     ["Sunken Fortress"] = "https://raw.githubusercontent.com/Omeghub/FabledlegacyDungeon/refs/heads/main/Btwodungeon",
     ["Cursed Marshes"] = "https://raw.githubusercontent.com/Omeghub/FabledlegacyDungeon/refs/heads/main/Cthirddungeon",
-    ["Ragnarök's Descent"] = "https://raw.githubusercontent.com/Omeghub/FabledlegacyDungeon/refs/heads/main/Dfourdungeon",
-    ["Thundering Peaks"] = "https://raw.githubusercontent.com/Omeghub/FabledlegacyDungeon/refs/heads/main/Efivedungeon",
-    ["Fallen Paradise"] = "https://raw.githubusercontent.com/Omeghub/FabledlegacyDungeon/refs/heads/main/Fsixdungeon",
+   -- ["Ragnarök's Descent"] = "https://raw.githubusercontent.com/Omeghub/FabledlegacyDungeon/refs/heads/main/Dfourdungeon",
+   -- ["Thundering Peaks"] = "https://raw.githubusercontent.com/Omeghub/FabledlegacyDungeon/refs/heads/main/Efivedungeon",
+   -- ["Fallen Paradise"] = "https://raw.githubusercontent.com/Omeghub/FabledlegacyDungeon/refs/heads/main/Fsixdungeon",
     ["Eternal Domain"] = "",
     ["Stardust Citadel"] = "",
     ["Ethereal Farlands"] = "",
     ["Hellbound Sanctum"] = "",
     ["Forsaken Limbo"] = "",
-    ["Neon District"] = "",
+    --["Neon District"] = "https://raw.githubusercontent.com/Omeghub/FabledlegacyDungeon/refs/heads/main/ltwelfthdungeon",
 }
 
+-- Services
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+
+-- ========================================================
+-- VIRTUAL CLICK (TEXTBUTTON EXACT)
+local function ClickStartDungeon()
+    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not playerGui then return end
+
+    local mainGui = playerGui:FindFirstChild("mainGui")
+    if not mainGui then return end
+
+    local startDungeon = mainGui:FindFirstChild("startDungeon")
+    if not startDungeon then return end
+
+    local button = startDungeon:FindFirstChild("TextButton")
+    if not button then return end
+    if not button.Visible or not button.Active then return end
+    if DungeonStarted then return end
+
+    -- Equip best AVANT start
+    if not EquipBestDone then
+        local equipBest = ReplicatedStorage:FindFirstChild("EquipBest")
+        if equipBest then
+            equipBest:FireServer()
+        end
+        EquipBestDone = true
+    end
+
+    -- Position écran du bouton
+    local pos = button.AbsolutePosition
+    local size = button.AbsoluteSize
+    local x = pos.X + size.X / 2
+    local y = pos.Y + size.Y / 2
+
+    -- Click souris réel
+    VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 0)
+    task.wait(0.05)
+    VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 0)
+
+    DungeonStarted = true
+    warn("[AUTO START] Click sur startDungeon.TextButton")
+end
 
 -- ========================================================
 -- MAIN LOOP
 task.spawn(function()
     while task.wait(1) do
+
+        -- Load dungeon script
         local settings = Workspace:FindFirstChild("DungeonSettings")
         local session = settings and settings:FindFirstChild("SessionName")
-
         if session then
             local dungeonName = session.Value
-
             if not executedDungeons[dungeonName] then
                 local url = DungeonScripts[dungeonName]
-                if url and url ~= "" then
-                    local success, err = pcall(function()
-                        local dungeonFunction = loadstring(game:HttpGet(url))()
-                        dungeonFunction(AutoFarmValue, AutoSpellValue)
+                if url then
+                    local ok, err = pcall(function()
+                        local fn = loadstring(game:HttpGet(url))()
+                        fn(AutoFarmValue, AutoSpellValue)
                         executedDungeons[dungeonName] = true
                     end)
-
-                    if not success then
-                        warn("Erreur lors du chargement du dungeon " .. dungeonName .. ": " .. err)
+                    if not ok then
+                        warn("Erreur dungeon:", err)
                     end
                 end
             end
         end
 
-        -- Spawn Companion (si présent)
+        -- Auto start dungeon
+        if AutoStartDungeon and not DungeonStarted then
+            ClickStartDungeon()
+        end
+
+        -- Spawn companion
         if AutoFarmValue.Value and Workspace:FindFirstChild("CompanionPart") then
             local spawnComp = ReplicatedStorage:FindFirstChild("SpawnCompanion")
             if spawnComp then
@@ -136,22 +189,225 @@ task.spawn(function()
 end)
 
 -- ========================================================
--- UI
+-- UI TOGGLES
 Tabs.Main:AddToggle("AutoFarmTP", {
     Title = "Auto Farm TP",
     Default = false,
     Callback = function(v)
         AutoFarmValue.Value = v
+        if not v then
+            EquipBestDone = false
+            DungeonStarted = false
+        end
+    end
+})
+
+Tabs.Main:AddToggle("AutoStartDungeon", {
+    Title = "Auto Start Dungeon",
+    Default = false,
+    Callback = function(v)
+        AutoStartDungeon = v
+        if not v then
+            DungeonStarted = false
+        end
     end
 })
 
 Tabs.Main:AddToggle("AutoSpell", {
-    Title = "Auto Spell Q/E/R",
+    Title = "Auto Spell Q / E / R",
     Default = false,
     Callback = function(v)
         AutoSpellValue.Value = v
     end
 })
+
+-- =========================================================
+-- AUTO RETRY (FAIL + COMPLETION)
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+local AutoRetry = false
+local Connections = {}
+
+local function fireRetry(reason)
+    if not AutoRetry then return end
+    if _G.ForceReturnToLobby then return end
+
+    local voteRemote = ReplicatedStorage:FindFirstChild("voteRemote")
+    if voteRemote then
+        warn("🔁 Auto Retry triggered:", reason)
+        voteRemote:FireServer("repeat")
+
+        if _G.sendAlertWebhook then
+            _G.sendAlertWebhook(
+                "Auto Retry Dungeon Finish",
+                reason
+            )
+        end
+    end
+end
+
+local function SetupAutoRetry()
+    if #Connections > 0 then return end
+
+    local gui = LocalPlayer:WaitForChild("PlayerGui")
+    local completionScreen = gui:WaitForChild("CompletionScreen")
+
+    local failedFrame = completionScreen:WaitForChild("failedFrame")
+    local completionBorder = completionScreen:WaitForChild("CompletionBorder")
+
+    table.insert(Connections,
+        failedFrame:GetPropertyChangedSignal("Visible"):Connect(function()
+            if failedFrame.Visible then
+                fireRetry("Dungeon failed")
+            end
+        end)
+    )
+
+    table.insert(Connections,
+        completionBorder:GetPropertyChangedSignal("Visible"):Connect(function()
+            if completionBorder.Visible then
+                fireRetry("Dungeon completed")
+            end
+        end)
+    )
+end
+
+local function StopAutoRetry()
+    AutoRetry = false
+    for _, c in ipairs(Connections) do
+        pcall(function() c:Disconnect() end)
+    end
+    Connections = {}
+end
+
+Tabs.Main:AddToggle("AutoRetry", {
+    Title = "Auto Retry (Fail + Win)",
+    Default = false,
+    Callback = function(v)
+        AutoRetry = v
+        if v then
+            SetupAutoRetry()
+        else
+            StopAutoRetry()
+        end
+    end
+})
+-- =========================================================
+-- AUTO SMART SWITCH DUNGEON
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local LocalPlayer = Players.LocalPlayer
+
+local AutoSwitchDungeon = false
+local LastSwitchSignature = ""
+
+Tabs.Main:AddToggle("AutoSmartSwitch", {
+    Title = "Auto Switch Dungeon (Smart)",
+    Default = false,
+    Callback = function(v)
+        AutoSwitchDungeon = v
+    end
+})
+
+local DungeonOrder = {
+    "Raided Village",
+    "Sunken Fortress",
+    "Cursed Marshes",
+    "Ragnarök's Descent",
+    "Thundering Peaks",
+    "Fallen Paradise",
+    "Eternal Domain",
+    "Stardust Citadel",
+    "Ethereal Farlands",
+    "Hellbound Sanctum",
+    "Forsaken Limbo",
+    "Neon District"
+}
+
+local DungeonReqs = {
+    ["Raided Village"]     = {Normal=1,   Expert=5,   Chaos=10,  Calamity=15},
+    ["Sunken Fortress"]    = {Normal=20,  Expert=25,  Chaos=30,  Calamity=35},
+    ["Cursed Marshes"]     = {Normal=40,  Expert=45,  Chaos=50,  Calamity=55},
+    ["Ragnarök's Descent"] = {Normal=60,  Expert=65,  Chaos=70,  Calamity=75},
+    ["Thundering Peaks"]   = {Normal=80,  Expert=85,  Chaos=90,  Calamity=95},
+    ["Fallen Paradise"]    = {Normal=100, Expert=105, Chaos=110, Calamity=115},
+    ["Eternal Domain"]     = {Normal=120, Expert=125, Chaos=130, Calamity=135},
+    ["Stardust Citadel"]   = {Normal=140, Expert=145, Chaos=150, Calamity=155},
+    ["Ethereal Farlands"]  = {Normal=160, Expert=165, Chaos=170, Calamity=175},
+    ["Hellbound Sanctum"]  = {Normal=180, Expert=185, Chaos=190, Calamity=195},
+    ["Forsaken Limbo"]     = {Normal=200, Expert=205, Chaos=210, Calamity=215},
+    ["Neon District"]      = {Normal=220, Expert=225, Chaos=230, Calamity=235},
+}
+
+local DifficultyOrder = { "Normal", "Expert", "Chaos", "Calamity" }
+
+local function GetBestDungeonAndDifficulty(level)
+    local bestDungeon = nil
+    local bestDifficulty = nil
+
+    for _, dungeon in ipairs(DungeonOrder) do
+        for i = #DifficultyOrder, 1, -1 do
+            local diff = DifficultyOrder[i]
+            local req = DungeonReqs[dungeon][diff]
+
+            if level >= req then
+                bestDungeon = dungeon
+                bestDifficulty = diff
+                break
+            end
+        end
+    end
+
+    return bestDungeon, bestDifficulty
+end
+
+task.spawn(function()
+    while task.wait(2) do
+        if not AutoSwitchDungeon then continue end
+
+        local data = LocalPlayer:FindFirstChild("data")
+        local levelValue = data and data:FindFirstChild("level")
+        if not levelValue then continue end
+
+        local dungeonSettings = workspace:FindFirstChild("DungeonSettings")
+        if not dungeonSettings then continue end
+
+        local currentDungeon = dungeonSettings:FindFirstChild("SessionName")
+        local currentDifficulty = dungeonSettings:FindFirstChild("Difficulty")
+        if not currentDungeon or not currentDifficulty then continue end
+
+        local level = levelValue.Value
+        local bestDungeon, bestDifficulty = GetBestDungeonAndDifficulty(level)
+
+        if not bestDungeon or not bestDifficulty then continue end
+
+        local signature = bestDungeon .. "|" .. bestDifficulty
+        if signature == LastSwitchSignature then continue end
+
+        if currentDungeon.Value == bestDungeon and currentDifficulty.Value == bestDifficulty then
+            LastSwitchSignature = signature
+            continue
+        end
+
+        LastSwitchSignature = signature
+
+        ReplicatedStorage:WaitForChild("SwitchDungeon"):FireServer({
+            Map = bestDungeon,
+            Calamity = (bestDifficulty == "Calamity"),
+            Hardcore = false,
+            NoHit = false,
+            Difficulty = bestDifficulty,
+            LevelRequirement = level,
+            Tier = 0,
+            Private = false,
+            Easter = false
+        })
+    end
+end)
 -- =========================================================
 -- WebHook
 local Players = game:GetService("Players")
