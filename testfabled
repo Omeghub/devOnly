@@ -216,15 +216,16 @@ Tabs.Main:AddToggle("AutoSpell", {
     end
 })
 
-Tabs.Main:AddToggle("ToggleUI", {
+
+Tabs.Settings:AddButton({
     Title = "Cacher / Afficher l'UI",
     Description = "Masque ou affiche toute l'interface",
     Default = false,
     Callback = function()
-        -- Fluent gère l'état automatiquement
         Window:Minimize()
     end
 })
+
 
 
 -- =========================================================
