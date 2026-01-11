@@ -1,0 +1,548 @@
+local function LoadModule(url)
+    local module
+    repeat
+        local success, result = pcall(function()
+            return loadstring(game:HttpGet(url))()
+        end)
+        if success then
+            module = result
+        else
+            warn("Module non chargé, retry dans 1s : "..url)
+            wait(1)
+        end
+    until module
+    return module
+end
+
+local player = game.Players.LocalPlayer
+repeat wait() until player and player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+--
+if getgenv().ReinjectLoaded then return end
+getgenv().ReinjectLoaded = true
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+local ScriptURL = "https://raw.githubusercontent.com/Omegahub1/20-20-/refs/heads/main/EscapeTsunamiForBrainrots"
+
+local queue = queue_on_teleport 
+           or (syn and syn.queue_on_teleport) 
+           or (fluxus and fluxus.queue_on_teleport) 
+           or queueonteleport
+
+if not queue then
+    return
+end
+
+local TeleportQueued = false
+
+LocalPlayer.OnTeleport:Connect(function()
+    if TeleportQueued then return end
+    TeleportQueued = true
+
+    queue([[
+        repeat task.wait() until game:IsLoaded()
+        task.wait(2)
+        loadstring(game:HttpGet("]]..ScriptURL..[[", true))()
+    ]])
+end)
+-- =========================================================
+-- CHARGEMENT DE FLUENT ET INTERFACE
+-- =========================================================
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/ImBrokz89/test/main/addons"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/ImBrokz89/test/main/Maddons"))()
+
+local Window = Fluent:CreateWindow({
+   Title = "Escape Tsunami For Brainrots I Omega Hub",
+   TabWidth = 160,
+   Size = UDim2.fromOffset(580, 460),
+   Theme = "Dark",
+   Acrylic = false,
+   MinimizeKey = Enum.KeyCode.End 
+})
+
+local Tabs = {
+    --Main = Window:AddTab({ Title = "Auto Farm", Icon = "swords" }),
+    Farm = Window:AddTab({ Title = "Farm", Icon = "sword" }),
+    Players = Window:AddTab({Title = "Player", Icon = "layers" }),
+    Grab = Window:AddTab({ Title = "Grab", Icon = "flame" }),
+    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
+}
+-- =========================================================
+-- REMOVE ACTIVE TSUNAMIS (FLUENT TOGGLE)
+local Workspace = game:GetService("Workspace")
+local ActiveTsunamis = Workspace:WaitForChild("ActiveTsunamis")
+
+local RemoveTsunamis = false
+local TsunamiConnection = nil
+
+local function clearTsunamis()
+    for _, obj in ipairs(ActiveTsunamis:GetChildren()) do
+        if obj:IsA("Model") then
+            obj:Destroy()
+        end
+    end
+end
+
+local Section = Tabs.Farm:AddSection("Remove Waters")
+
+Tabs.Farm:AddToggle("RemoveTsunamis", {
+    Title = "Remove Tsunamis",
+    Default = false,
+    Callback = function(state)
+        RemoveTsunamis = state
+        if state then
+            clearTsunamis()
+            TsunamiConnection = ActiveTsunamis.ChildAdded:Connect(function(child)
+                if RemoveTsunamis and child:IsA("Model") then
+                    task.wait()
+                    child:Destroy()
+                end
+            end)
+        else
+            if TsunamiConnection then
+                TsunamiConnection:Disconnect()
+                TsunamiConnection = nil
+            end
+        end
+    end
+})
+-- =========================================================
+-- AUTO GRAB + AUTO PLACE BRAINROT (BASE 1 → 5)
+
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+
+local LocalPlayer = Players.LocalPlayer
+local UserId = LocalPlayer.UserId
+
+local BrainrotsFolder = Workspace:WaitForChild("ActiveBrainrots")
+local BasesFolder = Workspace:WaitForChild("Bases")
+
+local AutoGrab = false
+local AutoPlace = false
+local Connections = {}
+
+local AllBrainrots = {
+    "Fragola La La La",
+    "La Vacca Black Hole Goat",
+    "Job Job Job Sahur",
+    "Dug Dug Dug",
+    "Bisonte Giuppitere",
+    "Alessio",
+    "Esok Sekolah",
+    "Caffe Trinity"
+}
+
+local SelectedBrainrots = {} -- [name] = true
+
+local function getHRP()
+    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    return char:WaitForChild("HumanoidRootPart")
+end
+
+local function getMyBase()
+    for i = 1, 5 do
+        local base = BasesFolder:FindFirstChild("Base"..i)
+        if base and base:GetAttribute("Holder") == UserId then
+            return base
+        end
+    end
+    warn("[WARN] Base non trouvée")
+end
+
+local function getModelCFrame(model)
+    local parts = {}
+
+    for _, v in ipairs(model:GetDescendants()) do
+        if v:IsA("BasePart") then
+            table.insert(parts, v)
+        end
+    end
+
+    if #parts == 0 then
+        return model:GetPivot()
+    end
+
+    local sum = Vector3.zero
+    for _, p in ipairs(parts) do
+        sum += p.Position
+    end
+
+    return CFrame.new(sum / #parts)
+end
+
+local function getPrompt(model)
+    for _, v in ipairs(model:GetDescendants()) do
+        if v:IsA("ProximityPrompt") then
+            return v
+        end
+    end
+end
+
+local function isBrainrotSelected(name)
+    return SelectedBrainrots[name] == true
+end
+
+local function tpToBase()
+    local base = getMyBase()
+    if not base then return end
+
+    local cf = getModelCFrame(base)
+    getHRP().CFrame = cf + Vector3.new(0,3,0)
+end
+
+local function handleBrainrot(model)
+    if not AutoGrab then return end
+    if not isBrainrotSelected(model.Name) then return end
+
+    local cf = getModelCFrame(model)
+    if not cf then
+        warn("[WARN] Impossible de TP :", model.Name)
+        return
+    end
+
+    getHRP().CFrame = cf + Vector3.new(0,3,0)
+    task.wait(0.8)
+
+    local prompt = getPrompt(model)
+    if prompt then
+        fireproximityprompt(prompt)
+    else
+        warn("[WARN] Pas de ProximityPrompt :", model.Name)
+    end
+
+    task.wait(0.5)
+    tpToBase()
+end
+
+local function autoPlaceBrainrot()
+    if not AutoPlace then return end
+
+    local base = getMyBase()
+    if not base then return end
+
+    local slots = base:FindFirstChild("Slots")
+    if not slots then return end
+
+    for i = 1, 30 do
+        local slot = slots:FindFirstChild("Slot"..i)
+        if slot then
+            local occupied = false
+            for _, child in ipairs(slot:GetChildren()) do
+                if child:IsA("Tool") then
+                    occupied = true
+                    break
+                end
+            end
+
+            if not occupied then
+                local cf = getModelCFrame(slot)
+                local prompt = getPrompt(slot)
+
+                if cf and prompt then
+                    getHRP().CFrame = cf + Vector3.new(0,3,0)
+                    task.wait(0.3)
+                    fireproximityprompt(prompt)
+                    break
+                end
+            end
+        end
+    end
+end
+
+local function scanAll()
+    for _, folder in ipairs(BrainrotsFolder:GetChildren()) do
+        for _, model in ipairs(folder:GetChildren()) do
+            if isBrainrotSelected(model.Name) then
+                task.spawn(handleBrainrot, model)
+            end
+        end
+    end
+end
+
+local function connectAll()
+    for _, folder in ipairs(BrainrotsFolder:GetChildren()) do
+        table.insert(Connections,
+            folder.ChildAdded:Connect(function(child)
+                if isBrainrotSelected(child.Name) then
+                    task.wait()
+                    handleBrainrot(child)
+                end
+            end)
+        )
+    end
+end
+
+local function disconnectAll()
+    for _, c in ipairs(Connections) do
+        c:Disconnect()
+    end
+    table.clear(Connections)
+end
+
+local Section = Tabs.Grab:AddSection("Auto Grab")
+
+Tabs.Grab:AddDropdown("BrainrotSelector", {
+    Title = "Select Brainrots to Grab",
+    Values = AllBrainrots,
+    Multi = true,
+    Default = {},
+    Callback = function(values)
+        table.clear(SelectedBrainrots)
+
+        if typeof(values) == "table" then
+            for name, state in pairs(values) do
+                if state == true then
+                    SelectedBrainrots[name] = true
+                end
+            end
+        end
+
+        for name in pairs(SelectedBrainrots) do
+        end
+    end
+})
+
+Tabs.Grab:AddToggle("AutoGrabBrainrot", {
+    Title = "Auto Grab Brainrot",
+    Default = false,
+    Callback = function(v)
+        AutoGrab = v
+        if v then
+            scanAll()
+            connectAll()
+        else
+            disconnectAll()
+        end
+    end
+})
+
+local Section = Tabs.Farm:AddSection("Slots")
+
+Tabs.Farm:AddToggle("AutoPlaceBrainrot", {
+    Title = "Auto Place Brainrot",
+    Default = false,
+    Callback = function(v)
+        AutoPlace = v
+        if v then
+            task.spawn(function()
+                while AutoPlace do
+                    autoPlaceBrainrot()
+                    task.wait(1)
+                end
+            end)
+        end
+    end
+})
+
+
+-- =========================================================
+-- AUTO COLLECT (5 MIN COOLDOWN)
+
+local Section = Tabs.Farm:AddSection("Collect")
+
+local AutoCollect = false
+local CollectCooldown = 300
+local LastCollectTime = 0
+
+local function autoCollect()
+    if not AutoCollect then return end
+
+    if os.clock() - LastCollectTime < CollectCooldown then
+        return
+    end
+
+    local base = getMyBase()
+    if not base then return end
+
+    local slots = base:FindFirstChild("Slots")
+    if not slots then return end
+
+    local collected = false
+
+    for i = 1, 30 do
+        local slot = slots:FindFirstChild("Slot"..i)
+        if slot then
+            local collectPart = slot:FindFirstChild("Collect")
+            if collectPart then
+                local gui = collectPart:FindFirstChildOfClass("SurfaceGui")
+                if gui and gui.Enabled then
+                    getHRP().CFrame = collectPart.CFrame + Vector3.new(0,3,0)
+                    task.wait(0.4)
+                    collected = true
+                end
+            end
+        end
+    end
+
+    if collected then
+        LastCollectTime = os.clock()
+    end
+end
+
+Tabs.Farm:AddToggle("AutoCollect", {
+    Title = "Auto Collect (5 min)",
+    Default = false,
+    Callback = function(v)
+        AutoCollect = v
+        if v then
+            task.spawn(function()
+                while AutoCollect do
+                    autoCollect()
+                    task.wait(1)
+                end
+            end)
+        else
+        end
+    end
+})
+
+-- =========================================================
+-- ANTI AFK (SAFE)
+
+local Players = game:GetService("Players")
+local VirtualUser = game:GetService("VirtualUser")
+
+local LocalPlayer = Players.LocalPlayer
+
+local AntiAFK = false
+local AntiAFKConnection = nil
+
+local function enableAntiAFK()
+    if AntiAFKConnection then return end
+
+    AntiAFKConnection = LocalPlayer.Idled:Connect(function()
+        if AntiAFK then
+            VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+            task.wait(0.1)
+            VirtualUser:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+            print("[ANTI-AFK] Action simulée")
+        end
+    end)
+end
+
+local function disableAntiAFK()
+    if AntiAFKConnection then
+        AntiAFKConnection:Disconnect()
+        AntiAFKConnection = nil
+    end
+end
+
+Tabs.Players:AddToggle("AntiAFK", {
+    Title = "Anti AFK",
+    Default = false,
+    Callback = function(v)
+        AntiAFK = v
+        if v then
+            enableAntiAFK()
+        else
+            disableAntiAFK()
+        end
+    end
+})
+
+
+-- =========================================================
+-- CONFIGURATION SYSTEM
+-- =========================================================
+SaveManager:SetLibrary(Fluent)
+InterfaceManager:SetLibrary(Fluent)
+SaveManager:IgnoreThemeSettings()
+InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+SaveManager:BuildConfigSection(Tabs.Settings)
+SaveManager:LoadAutoloadConfig()
+Window:SelectTab(1)
+
+-- =========================
+-- MOBILE / PC BUTTON
+
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "FluentMobileButton"
+screenGui.Parent = playerGui
+screenGui.ResetOnSpawn = false
+
+local openButton = Instance.new("ImageButton")
+openButton.Size = UDim2.new(0, 40, 0, 40)
+openButton.Position = UDim2.new(0, 10, 0, 10)
+openButton.BackgroundColor3 = Color3.fromRGB(0,0,0)
+openButton.BackgroundTransparency = 0.5
+openButton.Image = "rbxassetid://133520358863074"
+openButton.ScaleType = Enum.ScaleType.Fit
+openButton.BorderSizePixel = 0
+openButton.Parent = screenGui
+openButton.ZIndex = 10
+
+local uicorner = Instance.new("UICorner")
+uicorner.CornerRadius = UDim.new(0, 20)
+uicorner.Parent = openButton
+
+local dragging
+local dragInput
+local dragStart
+local startPos
+
+local function update(input)
+    local delta = input.Position - dragStart
+    openButton.Position = UDim2.new(
+        startPos.X.Scale, startPos.X.Offset + delta.X,
+        startPos.Y.Scale, startPos.Y.Offset + delta.Y
+    )
+end
+
+openButton.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = openButton.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+openButton.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+game:GetService("UserInputService").InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        update(input)
+    end
+end)
+
+openButton.MouseButton1Click:Connect(function()
+    local VirtualInputManager = game:GetService("VirtualInputManager")
+    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.LeftControl, false, game)
+    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.LeftControl, false, game)
+end)
+
+local function removeButton()
+    if openButton and openButton.Parent then
+        openButton:Destroy()
+    end
+end
+
+if Window.UI and Window.UI.CloseButton then
+    Window.UI.CloseButton.MouseButton1Click:Connect(function()
+        removeButton()
+    end)
+else
+    if Window.OnClose then
+        local oldClose = Window.OnClose
+        Window.OnClose = function()
+            removeButton()
+            if oldClose then oldClose() end
+        end
+    end
+end
