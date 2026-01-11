@@ -23,7 +23,7 @@ getgenv().ReinjectLoaded = true
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
-local ScriptURL = "https://raw.githubusercontent.com/Omegahub1/20-20-/refs/heads/main/EscapeTsunamiForBrainrots"
+local ScriptURL = "https://raw.githubusercontent.com/Omeghub/devOnly/refs/heads/main/brainrot"
 
 local queue = queue_on_teleport 
            or (syn and syn.queue_on_teleport) 
