@@ -317,14 +317,25 @@ local function autoPlaceBrainrot()
 
     for i = 1, 30 do
         local slot = slots:FindFirstChild("Slot"..i)
-        if slot and #slot:GetChildren() == 0 then
-            local cf = getModelCFrame(slot)
-            local prompt = getPrompt(slot)
-            if cf and prompt then
-                getHRP().CFrame = cf + Vector3.new(0,3,0)
-                task.wait(0.3)
-                pcall(fireproximityprompt, prompt)
-                break
+        if slot then
+            local occupied = false
+            for _, child in ipairs(slot:GetChildren()) do
+                if child:IsA("Tool") then
+                    occupied = true
+                    break
+                end
+            end
+
+            if not occupied then
+                local cf = getModelCFrame(slot)
+                local prompt = getPrompt(slot)
+
+                if cf and prompt then
+                    getHRP().CFrame = cf + Vector3.new(0,3,0)
+                    task.wait(0.3)
+                    fireproximityprompt(prompt)
+                    break
+                end
             end
         end
     end
