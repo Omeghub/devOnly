@@ -287,7 +287,7 @@ local function handleBrainrot(model)
     end
 
     getHRP().CFrame = cf + Vector3.new(0, 3, 0)
-    task.wait(0.5)
+    task.wait(0.15)
 
     local stats = getBrainrotStats(model)
     if stats then
@@ -299,7 +299,7 @@ local function handleBrainrot(model)
         pcall(fireproximityprompt, prompt)
     end
 
-    task.wait(0.5)
+    task.wait(0.15)
 
     tpToBase()
 
