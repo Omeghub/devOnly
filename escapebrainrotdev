@@ -1138,53 +1138,43 @@ Tabs.Farm:AddToggle("AutoCollect", {
         end
     end
 })
-
-
 -- =========================================================
--- ANTI AFK (STABLE)
+-- ANTI AFK (AUTO REJOIN AVEC GAME ID)
+
 local Players = game:GetService("Players")
-local VirtualUser = game:GetService("VirtualUser")
-local RunService = game:GetService("RunService")
+local TeleportService = game:GetService("TeleportService")
 
 local LocalPlayer = Players.LocalPlayer
 
+local TARGET_GAME_ID = 131623223084840 -- ID du jeu à rejoindre
+local REJOIN_DELAY = 900 -- 25 minutes (anti AFK)
+
 local AntiAFK = false
-local AntiAFKConnection = nil
-local LAST_ACTION = 0
-local ACTION_DELAY = 600
+local RejoinTask = nil
 
 local function startAntiAFK()
-    if AntiAFKConnection then return end
+    if RejoinTask then return end
 
-    AntiAFKConnection = RunService.Heartbeat:Connect(function()
-        if not AntiAFK then return end
+    RejoinTask = task.spawn(function()
+        while AntiAFK do
+            print("[ANTI-AFK] Rejoin dans " .. REJOIN_DELAY .. "s")
+            task.wait(REJOIN_DELAY)
 
-        if os.clock() - LAST_ACTION >= ACTION_DELAY then
-            LAST_ACTION = os.clock()
-
-            local cam = workspace.CurrentCamera.CFrame
-            local pos = Vector2.new(0, 0)
-
-            VirtualUser:Button1Down(pos, cam)
-            task.wait(0.05)
-            VirtualUser:Button1Up(pos, cam)
-
-            VirtualUser:MoveMouse(pos)
-
-            print("[ANTI-AFK] Click souris envoyé")
+            if AntiAFK then
+                print("[ANTI-AFK] Rejoin avec Game ID :", TARGET_GAME_ID)
+                TeleportService:Teleport(TARGET_GAME_ID, LocalPlayer)
+            end
         end
     end)
 end
 
 local function stopAntiAFK()
-    if AntiAFKConnection then
-        AntiAFKConnection:Disconnect()
-        AntiAFKConnection = nil
-    end
+    AntiAFK = false
+    RejoinTask = nil
 end
 
 Tabs.Players:AddToggle("AntiAFK", {
-    Title = "Anti AFK",
+    Title = "Anti AFK (Auto Rejoin Game)",
     Default = false,
     Callback = function(v)
         AntiAFK = v
