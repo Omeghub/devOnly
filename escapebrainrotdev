@@ -930,9 +930,8 @@ local function autoJoinAfterTP()
     HasTeleported = true
 
     task.spawn(function()
-        local delayTime = math.random(2, 4)
-        print("[AUTO OBBY] Join game dans " .. delayTime .. "s")
-        task.wait(delayTime)
+        print("[AUTO OBBY] Join game dans 2s")
+        task.wait(2)
 
         if AutoObbyTP then
             print("[AUTO OBBY] Téléportation vers le jeu cible")
@@ -940,6 +939,7 @@ local function autoJoinAfterTP()
         end
     end)
 end
+
 
 -- =========================================================
 -- TP OBBY END
